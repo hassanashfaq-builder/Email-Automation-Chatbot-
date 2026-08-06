@@ -94,10 +94,10 @@
     </div>
 
     <div id="pasteTab">
-      <textarea id="pasteArea" placeholder="One guest per line, separated by | (pipe):
-Alfred de Zayas | alfred@example.com | UN Independent Expert, former OHCHR senior lawyer, critic of unilateral sanctions | US-Venezuela sanctions
+      <textarea id="pasteArea" placeholder="Paste directly from a spreadsheet (tab-separated), or use Name | Email | Background:
+Alfred de Zayas | alfred@example.com | UN Independent Expert, former OHCHR senior lawyer, critic of unilateral sanctions
 Jane Smith | jane@example.com | Professor of international law at Oxford, author of three books on sanctions law"></textarea>
-      <div class="hint">Format: Name | Email | Background | Topic (topic is optional)</div>
+      <div class="hint">Column order doesn't matter — the email is auto-detected wherever it appears in each row. Works with spreadsheet copy-paste (tabs) or the Name | Email | Background format.</div>
       <div class="row"><button id="importPasteBtn">Add to list</button></div>
     </div>
 
@@ -309,22 +309,72 @@ document.getElementById('selectAllBtn').onclick = () => { guestRows.querySelecto
 document.getElementById('selectNoneBtn').onclick = () => { guestRows.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false); updateSendCount(); };
 
 // ---- import: paste ----
+// Auto-detects the delimiter (tab from a spreadsheet paste, or | for the
+// manual format) and locates the email wherever it appears in a row rather
+// than assuming a fixed column order. Also handles a row that got split
+// across two physical lines because a spreadsheet cell had a line break in
+// it (a line whose first column is empty is treated as a continuation of
+// the previous row, not a new one).
+const EMAIL_RE_G = /[^\s,;<>]+@[^\s,;<>]+\.[^\s,;<>]+/g;
+
+function parsePastedGuests(raw) {
+  const delim = raw.includes('\t') ? '\t' : (raw.includes('|') ? '|' : null);
+  const firstField = (line) => (delim ? line.split(delim)[0] : line).trim();
+  const hasEmail = (line) => { EMAIL_RE_G.lastIndex = 0; return EMAIL_RE_G.test(line); };
+
+  const rawLines = raw.split('\n');
+  const records = [];
+  let current = null;
+
+  for (const line of rawLines) {
+    if (!line.trim()) continue;
+    const isContinuation = current && !current.hasEmail && firstField(line) === '';
+
+    if (!isContinuation) {
+      if (current) records.push(current);
+      current = { name: firstField(line), lines: [line], hasEmail: hasEmail(line) };
+    } else {
+      current.lines.push(line);
+      if (hasEmail(line)) current.hasEmail = true;
+    }
+    // safety cap so a genuinely email-less row can't swallow many rows after it
+    if (current && current.lines.length >= 3) { records.push(current); current = null; }
+  }
+  if (current) records.push(current);
+
+  const skipped = [];
+  const parsed = records.map(r => {
+    const text = r.lines.join(' ');
+    EMAIL_RE_G.lastIndex = 0;
+    const emails = text.match(EMAIL_RE_G) || [];
+    const email = (emails[0] || '').trim();
+    let background = text;
+    if (r.name) background = background.replace(r.name, ''); // strip only the first occurrence (the name column) — a bio may naturally repeat the name later
+    emails.forEach(e => { background = background.split(e).join(''); });
+    background = background.replace(/[\t|]+/g, ' ').replace(/[\s,;]{2,}/g, ' ').trim().replace(/^[,;\s]+|[,;\s]+$/g, '');
+    return { name: r.name, email, background, topic: '' };
+  }).filter(g => {
+    const ok = g.name && g.email;
+    if (!ok) skipped.push(g.name || g.email || '(empty row)');
+    return ok;
+  });
+
+  return { parsed, skipped };
+}
+
 document.getElementById('importPasteBtn').onclick = async () => {
   const raw = document.getElementById('pasteArea').value.trim();
   if (!raw) return;
-  const parsed = raw.split('\n').map(line => line.trim()).filter(Boolean).map(line => {
-    const parts = line.split('|').map(p => p.trim());
-    return { name: parts[0], email: parts[1], background: parts[2] || '', topic: parts[3] || '' };
-  }).filter(g => g.name && g.email);
+  const { parsed, skipped } = parsePastedGuests(raw);
 
-  if (!parsed.length) { showToast('No valid rows found. Use: Name | Email | Background', true); return; }
+  if (!parsed.length) { showToast('No rows with a detectable email address were found.', true); return; }
 
   await fetch('/api/guests/import', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ guests: parsed })
   });
   document.getElementById('pasteArea').value = '';
-  showToast(`Added ${parsed.length} guest(s)`);
+  showToast(`Added ${parsed.length} guest(s)` + (skipped.length ? ` — skipped ${skipped.length} row(s) with no detectable email` : ''), skipped.length > 0);
   loadGuests();
 };
 
