@@ -3,6 +3,7 @@ const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const dns = require('dns');
 const { generateInvitation } = require('./lib/generate');
 
 const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'));
@@ -31,6 +32,29 @@ function textToHtml(text) {
   const withLinks = escaped.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>');
   return `<div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #111;">${withLinks.split('\n').map(l => l || '&nbsp;').join('<br>\n')}</div>`;
 }
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Recipient domain must have a mail server (MX, or A/AAAA as an implicit-MX
+// fallback per RFC 5321) — catches typo'd/nonexistent domains before we ever
+// attempt to send, instead of finding out only from an async bounce email.
+async function domainHasMailServer(email) {
+  const domain = email.split('@')[1];
+  if (!domain) return false;
+  try {
+    const mx = await dns.promises.resolveMx(domain);
+    if (mx && mx.length) return true;
+  } catch (_) {
+    // resolveMx does raw DNS queries that some networks block outright
+    // (unrelated to whether the domain is real) — fall back to the OS
+    // resolver below rather than treating this as "domain doesn't exist".
+  }
+  try {
+    await dns.promises.lookup(domain);
+    return true;
+  } catch (_) {}
+  return false;
+}
+
 function getTransporter() {
   return nodemailer.createTransport({
     host: config.host,
@@ -149,6 +173,14 @@ app.post('/api/process', async (req, res) => {
         if (i !== -1) { withId[i].id = guest.id; saveGuests(withId); }
       }
 
+      if (!EMAIL_RE.test(guest.email)) {
+        throw new Error('Invalid email address format');
+      }
+      send({ type: 'status', email: guest.email, name: guest.name, stage: 'validating' });
+      if (!(await domainHasMailServer(guest.email))) {
+        throw new Error(`"${guest.email.split('@')[1]}" has no mail server (MX/A record) — address can't receive email`);
+      }
+
       send({ type: 'status', email: guest.email, name: guest.name, stage: 'generating' });
       const body = await generateInvitation(guest, config);
 
@@ -182,6 +214,7 @@ app.post('/api/process', async (req, res) => {
       const all3 = loadGuests();
       const idx3 = all3.findIndex(g => g.email === guest.email);
       if (idx3 !== -1) {
+        all3[idx3].sent = false;
         all3[idx3].failed = true;
         all3[idx3].failedAt = new Date().toISOString();
         all3[idx3].error = err.message;

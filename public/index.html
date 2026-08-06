@@ -416,6 +416,7 @@ sendBtn.onclick = async () => {
         continue;
       }
       const el = document.getElementById('status-' + cssId(evt.email));
+      if (evt.stage === 'validating') { if (el) { el.className = 'status generating'; el.textContent = 'Checking address...'; } }
       if (evt.stage === 'generating') { if (el) { el.className = 'status generating'; el.textContent = 'Writing email...'; } }
       if (evt.stage === 'sending') { if (el) { el.className = 'status sending'; el.textContent = 'Sending...'; } }
       if (evt.stage === 'done') { sentCount++; if (el) { el.className = 'status sent'; el.textContent = '✓ Sent'; } }
