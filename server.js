@@ -6,7 +6,25 @@ const crypto = require('crypto');
 const dns = require('dns');
 const { generateInvitation } = require('./lib/generate');
 
-const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'));
+function loadConfig() {
+  const configPath = path.join(__dirname, 'config.json');
+  if (fs.existsSync(configPath)) {
+    return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  }
+  // no config.json in this environment (e.g. Render) — build from env vars instead
+  return {
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '465', 10),
+    secure: process.env.SMTP_SECURE !== 'false',
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    fromName: process.env.FROM_NAME,
+    subject: process.env.EMAIL_SUBJECT,
+    geminiApiKey: process.env.GEMINI_API_KEY,
+    geminiModel: process.env.GEMINI_MODEL || 'gemini-flash-latest',
+    baseUrl: process.env.BASE_URL || 'http://localhost:3344',
+  };
+}
+const config = loadConfig();
 const guestsPath = path.join(__dirname, 'guests.json');
 const baseUrl = config.baseUrl || 'http://localhost:3344';
 
@@ -229,7 +247,7 @@ app.post('/api/process', async (req, res) => {
   res.end();
 });
 
-const PORT = 3344;
+const PORT = process.env.PORT || 3344;
 app.listen(PORT, () => {
   console.log(`\nKianistan Podcast mailer running.\nOpen this in your browser: http://localhost:${PORT}\n`);
 });

@@ -127,6 +127,10 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
 </div>
 
 <div class="container" id="statsView" style="display:none">
+  <div class="row" style="justify-content:flex-end; margin-top:0; margin-bottom:14px">
+    <span class="count" id="statLastSynced"></span>
+    <button class="secondary" id="syncStatsBtn">Sync now</button>
+  </div>
   <div class="stat-cards">
     <div class="stat-card delivered" data-stat="delivered">
       <div class="num" id="statDeliveredNum">0</div>
@@ -185,6 +189,7 @@ let activeStat = 'delivered';
 async function loadStats() {
   const res = await fetch('/api/stats');
   statsData = await res.json();
+  document.getElementById('statLastSynced').textContent = 'Last synced: ' + new Date().toLocaleTimeString();
   document.getElementById('statDeliveredNum').textContent = statsData.totals.delivered;
   document.getElementById('statOpenedNum').textContent = statsData.totals.opened;
   document.getElementById('statNotDeliveredNum').textContent = statsData.totals.notDelivered;
@@ -226,6 +231,15 @@ document.querySelectorAll('.stat-card').forEach(card => card.onclick = () => {
   activeStat = card.dataset.stat;
   renderStatSection();
 });
+
+document.getElementById('syncStatsBtn').onclick = async () => {
+  const btn = document.getElementById('syncStatsBtn');
+  btn.disabled = true;
+  btn.textContent = 'Syncing...';
+  await loadStats();
+  btn.textContent = 'Sync now';
+  btn.disabled = false;
+};
 
 // ---- tabs ----
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
