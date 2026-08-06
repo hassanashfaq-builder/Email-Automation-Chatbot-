@@ -1,0 +1,14 @@
+{
+  "host": "mail.example.com",
+  "port": 465,
+  "secure": true,
+  "auth": {
+    "user": "you@example.com",
+    "pass": "YOUR_EMAIL_PASSWORD_HERE"
+  },
+  "fromName": "Your Name - Podcast",
+  "subject": "Invitation to Join the Podcast",
+  "geminiApiKey": "YOUR_GEMINI_API_KEY_HERE",
+  "geminiModel": "gemini-flash-latest",
+  "baseUrl": "http://localhost:3344"
+}

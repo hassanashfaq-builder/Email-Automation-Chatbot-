@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kianistan Podcast — Invitation Mailer</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #1a1d24; --border: #2a2e38; --text: #e8e9ec;
+    --muted: #9199a8; --accent: #4f8cff; --accent-hover: #6fa1ff;
+    --green: #3ecf8e; --red: #ff6b6b; --yellow: #f5c04a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 20px 32px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .container { max-width: 950px; margin: 0 auto; padding: 24px 32px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 20px; }
+  .card h2 { font-size: 14px; margin: 0 0 12px; font-weight: 600; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .tab { padding: 6px 14px; border-radius: 6px; font-size: 13px; cursor: pointer; color: var(--muted); background: transparent; border: 1px solid var(--border); }
+  .tab.active { background: var(--accent); color: white; border-color: var(--accent); }
+  textarea { width: 100%; min-height: 120px; background: #0d0f13; border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 10px; font-size: 13px; font-family: monospace; resize: vertical; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  input[type=file] { color: var(--muted); font-size: 13px; }
+  button { background: var(--accent); color: white; border: none; padding: 10px 18px; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 500; }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { background: #444; cursor: not-allowed; }
+  button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  button.secondary:hover { background: #23262e; }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  .toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .count { color: var(--muted); font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .name-cell { font-weight: 600; }
+  .email-cell { color: var(--muted); }
+  .status { font-size: 11px; padding: 2px 8px; border-radius: 20px; display: inline-block; }
+  .status.sent { background: rgba(62,207,142,0.15); color: var(--green); }
+  .status.pending { background: rgba(145,153,168,0.15); color: var(--muted); }
+  .status.generating { background: rgba(245,192,74,0.15); color: var(--yellow); }
+  .status.sending { background: rgba(79,140,255,0.15); color: var(--accent); }
+  .status.error { background: rgba(255,107,107,0.15); color: var(--red); }
+  .link-btn { background: none; border: none; color: var(--accent); text-decoration: underline; cursor: pointer; font-size: 12px; padding: 0; margin-right: 10px; }
+  .link-btn.danger { color: var(--red); }
+  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color: var(--yellow); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 4px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 10; }
+  .modal { background: var(--card); border: 1px solid var(--border); border-radius: 12px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; padding: 24px; }
+  .modal pre { white-space: pre-wrap; font-family: inherit; font-size: 14px; line-height: 1.6; }
+  .toast-container { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 10px; z-index: 20; }
+  .toast { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--green); padding: 14px 18px; border-radius: 8px; font-size: 14px; min-width: 260px; box-shadow: 0 6px 20px rgba(0,0,0,0.4); animation: slideIn 0.25s ease; }
+  .toast.error { border-left-color: var(--red); }
+  @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  nav.menubar { display: flex; gap: 4px; padding: 0 32px; border-bottom: 1px solid var(--border); }
+  nav.menubar .navitem { padding: 10px 16px; font-size: 13px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
+  nav.menubar .navitem.active { color: var(--text); border-bottom-color: var(--accent); }
+  .stat-cards { display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+  .stat-card { flex: 1; min-width: 160px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; cursor: pointer; transition: border-color 0.15s; }
+  .stat-card:hover { border-color: var(--accent); }
+  .stat-card.active { border-color: var(--accent); background: #1c2130; }
+  .stat-card .num { font-size: 28px; font-weight: 700; }
+  .stat-card .label { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .stat-card.delivered .num { color: var(--green); }
+  .stat-card.opened .num { color: var(--accent); }
+  .stat-card.notdelivered .num { color: var(--red); }
+  .empty-hint { color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Kianistan Podcast — Invitation Mailer</h1>
+    <p>Sending from hassan@kianistan.com</p>
+  </div>
+  <span class="count" id="countLabel">0 guests</span>
+</header>
+
+<nav class="menubar">
+  <div class="navitem active" data-view="guests">Guests</div>
+  <div class="navitem" data-view="stats">Email Stats</div>
+</nav>
+
+<div class="container" id="guestsView">
+
+  <div class="card">
+    <h2>Add guests</h2>
+    <div class="tabs">
+      <div class="tab active" data-tab="paste">Paste text</div>
+      <div class="tab" data-tab="upload">Upload CSV</div>
+    </div>
+
+    <div id="pasteTab">
+      <textarea id="pasteArea" placeholder="One guest per line, separated by | (pipe):
+Alfred de Zayas | alfred@example.com | UN Independent Expert, former OHCHR senior lawyer, critic of unilateral sanctions | US-Venezuela sanctions
+Jane Smith | jane@example.com | Professor of international law at Oxford, author of three books on sanctions law"></textarea>
+      <div class="hint">Format: Name | Email | Background | Topic (topic is optional)</div>
+      <div class="row"><button id="importPasteBtn">Add to list</button></div>
+    </div>
+
+    <div id="uploadTab" style="display:none">
+      <input type="file" id="csvFile" accept=".csv">
+      <div class="hint">CSV columns: name, email, background, topic (header row optional, topic optional)</div>
+      <div class="row"><button id="importCsvBtn">Add to list</button></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <button class="secondary" id="selectAllBtn">Select all</button>
+      <button class="secondary" id="selectNoneBtn">Select none</button>
+      <span style="flex:1"></span>
+      <button id="sendBtn">Generate &amp; Send (0)</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th style="width:30px"></th><th>Name</th><th>Email</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody id="guestRows"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<div class="container" id="statsView" style="display:none">
+  <div class="stat-cards">
+    <div class="stat-card delivered" data-stat="delivered">
+      <div class="num" id="statDeliveredNum">0</div>
+      <div class="label">Delivered</div>
+    </div>
+    <div class="stat-card opened" data-stat="opened">
+      <div class="num" id="statOpenedNum">0</div>
+      <div class="label">Opened</div>
+    </div>
+    <div class="stat-card notdelivered" data-stat="notDelivered">
+      <div class="num" id="statNotDeliveredNum">0</div>
+      <div class="label">Not delivered (failed)</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 id="statSectionTitle">Delivered</h2>
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Email</th><th id="statExtraCol">Sent at</th></tr>
+      </thead>
+      <tbody id="statRows"></tbody>
+    </table>
+    <div class="empty-hint" id="statEmptyHint" style="display:none">Nothing here yet</div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h3 id="modalName"></h3>
+    <pre id="modalBody"></pre>
+    <button class="secondary" id="closeModal">Close</button>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+let guests = [];
+const guestRows = document.getElementById('guestRows');
+const countLabel = document.getElementById('countLabel');
+const sendBtn = document.getElementById('sendBtn');
+
+// ---- top-level nav ----
+document.querySelectorAll('nav.menubar .navitem').forEach(item => item.onclick = () => {
+  document.querySelectorAll('nav.menubar .navitem').forEach(x => x.classList.remove('active'));
+  item.classList.add('active');
+  document.getElementById('guestsView').style.display = item.dataset.view === 'guests' ? 'block' : 'none';
+  document.getElementById('statsView').style.display = item.dataset.view === 'stats' ? 'block' : 'none';
+  if (item.dataset.view === 'stats') loadStats();
+});
+
+let statsData = null;
+let activeStat = 'delivered';
+
+async function loadStats() {
+  const res = await fetch('/api/stats');
+  statsData = await res.json();
+  document.getElementById('statDeliveredNum').textContent = statsData.totals.delivered;
+  document.getElementById('statOpenedNum').textContent = statsData.totals.opened;
+  document.getElementById('statNotDeliveredNum').textContent = statsData.totals.notDelivered;
+  renderStatSection();
+}
+
+const STAT_META = {
+  delivered: { title: 'Delivered', col: 'Sent at', field: 'sentAt' },
+  opened: { title: 'Opened', col: 'Opened at', field: 'openedAt' },
+  notDelivered: { title: 'Not delivered (failed)', col: 'Error', field: 'error' },
+};
+
+function renderStatSection() {
+  document.querySelectorAll('.stat-card').forEach(c => c.classList.toggle('active', c.dataset.stat === activeStat));
+  const meta = STAT_META[activeStat];
+  document.getElementById('statSectionTitle').textContent = meta.title;
+  document.getElementById('statExtraCol').textContent = meta.col;
+  const rows = (statsData && statsData[activeStat]) || [];
+  const tbody = document.getElementById('statRows');
+  tbody.innerHTML = rows.map(g => `
+    <tr>
+      <td class="name-cell">${escapeHtml(g.name)}</td>
+      <td class="email-cell">${escapeHtml(g.email)}</td>
+      <td>${escapeHtml(formatStatExtra(g, meta.field))}</td>
+    </tr>
+  `).join('');
+  document.getElementById('statEmptyHint').style.display = rows.length ? 'none' : 'block';
+}
+
+function formatStatExtra(g, field) {
+  if (field === 'error') return g.error || '';
+  const val = g[field];
+  if (!val) return '';
+  const extra = field === 'openedAt' && g.openCount > 1 ? ` (${g.openCount}x)` : '';
+  return new Date(val).toLocaleString() + extra;
+}
+
+document.querySelectorAll('.stat-card').forEach(card => card.onclick = () => {
+  activeStat = card.dataset.stat;
+  renderStatSection();
+});
+
+// ---- tabs ----
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  document.getElementById('pasteTab').style.display = t.dataset.tab === 'paste' ? 'block' : 'none';
+  document.getElementById('uploadTab').style.display = t.dataset.tab === 'upload' ? 'block' : 'none';
+});
+
+// ---- load guests ----
+async function loadGuests() {
+  const res = await fetch('/api/guests');
+  guests = await res.json();
+  render();
+}
+
+function render() {
+  countLabel.textContent = `${guests.length} guests`;
+  guestRows.innerHTML = '';
+  guests.forEach((g) => {
+    const tr = document.createElement('tr');
+    const statusHtml = g.sent
+      ? `<span class="status sent">✓ Sent${g.opened ? ' · Opened' : ''}</span>`
+      : g.failed
+        ? `<span class="status error" id="status-${cssId(g.email)}">Failed</span>`
+        : `<span class="status pending" id="status-${cssId(g.email)}">Pending</span>`;
+    tr.innerHTML = `
+      <td><input type="checkbox" data-email="${g.email}" ${g.sent ? '' : 'checked'}></td>
+      <td class="name-cell">${escapeHtml(g.name)}</td>
+      <td class="email-cell">${escapeHtml(g.email)}</td>
+      <td>${statusHtml}</td>
+      <td>
+        ${g.body ? `<button class="link-btn" data-preview="${g.email}">Preview</button>` : ''}
+        <button class="link-btn danger" data-remove="${g.email}">Remove</button>
+      </td>
+    `;
+    guestRows.appendChild(tr);
+  });
+  updateSendCount();
+}
+
+function cssId(email) { return email.replace(/[^a-z0-9]/gi, '_'); }
+function escapeHtml(s) { return (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+function updateSendCount() {
+  const checked = guestRows.querySelectorAll('input[type=checkbox]:checked').length;
+  sendBtn.textContent = `Generate & Send (${checked})`;
+  sendBtn.disabled = checked === 0;
+}
+guestRows.addEventListener('change', (e) => { if (e.target.type === 'checkbox') updateSendCount(); });
+
+guestRows.addEventListener('click', async (e) => {
+  if (e.target.dataset.preview) {
+    const g = guests.find(x => x.email === e.target.dataset.preview);
+    document.getElementById('modalName').textContent = `To: ${g.name} <${g.email}>`;
+    document.getElementById('modalBody').textContent = g.body;
+    document.getElementById('modalBackdrop').style.display = 'flex';
+  }
+  if (e.target.dataset.remove) {
+    await fetch('/api/guests/' + encodeURIComponent(e.target.dataset.remove), { method: 'DELETE' });
+    loadGuests();
+  }
+});
+document.getElementById('closeModal').onclick = () => document.getElementById('modalBackdrop').style.display = 'none';
+
+document.getElementById('selectAllBtn').onclick = () => { guestRows.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = true); updateSendCount(); };
+document.getElementById('selectNoneBtn').onclick = () => { guestRows.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false); updateSendCount(); };
+
+// ---- import: paste ----
+document.getElementById('importPasteBtn').onclick = async () => {
+  const raw = document.getElementById('pasteArea').value.trim();
+  if (!raw) return;
+  const parsed = raw.split('\n').map(line => line.trim()).filter(Boolean).map(line => {
+    const parts = line.split('|').map(p => p.trim());
+    return { name: parts[0], email: parts[1], background: parts[2] || '', topic: parts[3] || '' };
+  }).filter(g => g.name && g.email);
+
+  if (!parsed.length) { showToast('No valid rows found. Use: Name | Email | Background', true); return; }
+
+  await fetch('/api/guests/import', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ guests: parsed })
+  });
+  document.getElementById('pasteArea').value = '';
+  showToast(`Added ${parsed.length} guest(s)`);
+  loadGuests();
+};
+
+// ---- import: csv ----
+document.getElementById('importCsvBtn').onclick = async () => {
+  const file = document.getElementById('csvFile').files[0];
+  if (!file) { showToast('Choose a CSV file first', true); return; }
+  const text = await file.text();
+  const rows = parseCsv(text);
+  if (!rows.length) { showToast('No rows found in CSV', true); return; }
+
+  let cols = rows[0].map(c => c.toLowerCase());
+  let dataRows = rows;
+  let nameIdx = 0, emailIdx = 1, bgIdx = 2, topicIdx = 3;
+  if (cols.includes('name') && cols.includes('email')) {
+    nameIdx = cols.indexOf('name'); emailIdx = cols.indexOf('email');
+    bgIdx = cols.indexOf('background'); topicIdx = cols.indexOf('topic');
+    dataRows = rows.slice(1);
+  }
+
+  const parsed = dataRows.map(r => ({
+    name: r[nameIdx] || '', email: r[emailIdx] || '',
+    background: bgIdx > -1 ? (r[bgIdx] || '') : '', topic: topicIdx > -1 ? (r[topicIdx] || '') : ''
+  })).filter(g => g.name && g.email);
+
+  if (!parsed.length) { showToast('No valid rows found in CSV', true); return; }
+
+  await fetch('/api/guests/import', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ guests: parsed })
+  });
+  document.getElementById('csvFile').value = '';
+  showToast(`Added ${parsed.length} guest(s) from CSV`);
+  loadGuests();
+};
+
+function parseCsv(text) {
+  // minimal CSV parser handling quoted fields
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i], next = text[i+1];
+    if (inQuotes) {
+      if (c === '"' && next === '"') { field += '"'; i++; }
+      else if (c === '"') { inQuotes = false; }
+      else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (field !== '' || row.length) { row.push(field); rows.push(row); row = []; field = ''; }
+      } else field += c;
+    }
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.some(f => f.trim() !== ''));
+}
+
+// ---- generate & send ----
+sendBtn.onclick = async () => {
+  const emails = [...guestRows.querySelectorAll('input[type=checkbox]:checked')].map(cb => cb.dataset.email);
+  if (!emails.length) return;
+  if (!confirm(`Generate personalized emails and send to ${emails.length} guest(s)? This will actually send real emails.`)) return;
+
+  sendBtn.disabled = true;
+  const originalText = sendBtn.textContent;
+  sendBtn.innerHTML = '<span class="spinner"></span> Working...';
+
+  emails.forEach(email => {
+    const el = document.getElementById('status-' + cssId(email));
+    if (el) { el.className = 'status pending'; el.textContent = 'Queued'; }
+  });
+
+  const res = await fetch('/api/process', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ emails })
+  });
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let sentCount = 0, errorCount = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const evt = JSON.parse(line.slice(6));
+
+      if (evt.type === 'fatal') {
+        showToast(evt.error, true);
+        continue;
+      }
+      if (evt.type === 'complete') {
+        sendBtn.disabled = false;
+        sendBtn.textContent = originalText;
+        showToast(`Done — ${sentCount} sent${errorCount ? `, ${errorCount} failed` : ''}`, errorCount > 0);
+        loadGuests();
+        continue;
+      }
+      const el = document.getElementById('status-' + cssId(evt.email));
+      if (evt.stage === 'generating') { if (el) { el.className = 'status generating'; el.textContent = 'Writing email...'; } }
+      if (evt.stage === 'sending') { if (el) { el.className = 'status sending'; el.textContent = 'Sending...'; } }
+      if (evt.stage === 'done') { sentCount++; if (el) { el.className = 'status sent'; el.textContent = '✓ Sent'; } }
+      if (evt.stage === 'error') { errorCount++; if (el) { el.className = 'status error'; el.textContent = 'Failed'; } showToast(`Failed for ${evt.name}: ${evt.error}`, true); }
+    }
+  }
+};
+
+function showToast(msg, isError) {
+  const container = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = 'toast' + (isError ? ' error' : '');
+  t.textContent = msg;
+  container.appendChild(t);
+  setTimeout(() => t.remove(), 5000);
+}
+
+loadGuests();
+</script>
+</body>
+</html>
