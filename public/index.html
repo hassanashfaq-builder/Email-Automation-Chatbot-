@@ -479,7 +479,7 @@ sendBtn.onclick = async () => {
       showToast(`Failed for ${guest ? guest.name : email}: ${err.message}`, true);
     }
 
-    await new Promise(r => setTimeout(r, 2000)); // throttle between guests
+    await new Promise(r => setTimeout(r, 3500)); // throttle between guests — stays under Gemini's free-tier ~20/min rate limit
   }
 
   sendBtn.disabled = false;
