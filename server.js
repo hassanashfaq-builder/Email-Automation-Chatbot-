@@ -5,6 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 const dns = require('dns');
 const { generateInvitation } = require('./lib/generate');
+const { loadGuests, saveGuests } = require('./lib/db');
 
 function loadConfig() {
   const configPath = path.join(__dirname, 'config.json');
@@ -25,7 +26,6 @@ function loadConfig() {
   };
 }
 const config = loadConfig();
-const guestsPath = path.join(__dirname, 'guests.json');
 const baseUrl = config.baseUrl || 'http://localhost:3344';
 
 // 1x1 transparent PNG used as the open-tracking pixel
@@ -38,13 +38,6 @@ const app = express();
 app.use(express.json({ limit: '5mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-function loadGuests() {
-  if (!fs.existsSync(guestsPath)) return [];
-  return JSON.parse(fs.readFileSync(guestsPath, 'utf8'));
-}
-function saveGuests(guests) {
-  fs.writeFileSync(guestsPath, JSON.stringify(guests, null, 2));
-}
 function textToHtml(text) {
   const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const withLinks = escaped.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>');
@@ -82,12 +75,12 @@ function getTransporter() {
   });
 }
 
-app.get('/api/guests', (req, res) => res.json(loadGuests()));
+app.get('/api/guests', async (req, res) => res.json(await loadGuests()));
 
 // Import guests (from paste or CSV upload). Merges by email — updates existing, adds new.
-app.post('/api/guests/import', (req, res) => {
+app.post('/api/guests/import', async (req, res) => {
   const incoming = req.body.guests || [];
-  const existing = loadGuests();
+  const existing = await loadGuests();
   const byEmail = new Map(existing.map(g => [g.email.toLowerCase(), g]));
 
   for (const g of incoming) {
@@ -113,36 +106,40 @@ app.post('/api/guests/import', (req, res) => {
   }
 
   const merged = [...byEmail.values()];
-  saveGuests(merged);
+  await saveGuests(merged);
   res.json(merged);
 });
 
-app.delete('/api/guests/:email', (req, res) => {
-  const guests = loadGuests().filter(g => g.email.toLowerCase() !== req.params.email.toLowerCase());
-  saveGuests(guests);
+app.delete('/api/guests/:email', async (req, res) => {
+  const guests = (await loadGuests()).filter(g => g.email.toLowerCase() !== req.params.email.toLowerCase());
+  await saveGuests(guests);
   res.json(guests);
 });
 
 // Open-tracking pixel — embedded 1x1 image in each sent email
-app.get('/api/track/:id.png', (req, res) => {
+app.get('/api/track/:id.png', async (req, res) => {
   res.setHeader('Content-Type', 'image/png');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.end(TRACKING_PIXEL);
 
-  const guests = loadGuests();
-  const idx = guests.findIndex(g => g.id === req.params.id);
-  if (idx !== -1) {
-    if (!guests[idx].opened) {
-      guests[idx].opened = true;
-      guests[idx].openedAt = new Date().toISOString();
+  try {
+    const guests = await loadGuests();
+    const idx = guests.findIndex(g => g.id === req.params.id);
+    if (idx !== -1) {
+      if (!guests[idx].opened) {
+        guests[idx].opened = true;
+        guests[idx].openedAt = new Date().toISOString();
+      }
+      guests[idx].openCount = (guests[idx].openCount || 0) + 1;
+      await saveGuests(guests);
     }
-    guests[idx].openCount = (guests[idx].openCount || 0) + 1;
-    saveGuests(guests);
+  } catch (err) {
+    console.error('Failed to record open:', err.message);
   }
 });
 
-app.get('/api/stats', (req, res) => {
-  const guests = loadGuests();
+app.get('/api/stats', async (req, res) => {
+  const guests = await loadGuests();
   const pick = (g) => ({ name: g.name, email: g.email });
 
   const delivered = guests.filter(g => g.sent).map(g => ({ ...pick(g), sentAt: g.sentAt }));
@@ -162,92 +159,88 @@ app.get('/api/stats', (req, res) => {
   });
 });
 
-// Generate + send for the selected guests, streaming progress via SSE
-app.post('/api/process', async (req, res) => {
-  const { emails } = req.body;
-  const guests = loadGuests();
-  const targets = guests.filter(g => emails.includes(g.email));
+// Generate + send for a single guest. One guest per request (rather than one
+// long-lived SSE stream for the whole batch) so each call finishes well
+// within a serverless function's execution time limit — the client drives
+// the batch by calling this once per selected guest.
+app.post('/api/process-one', async (req, res) => {
+  const { email } = req.body;
+  const guests = await loadGuests();
+  const guest = guests.find(g => g.email === email);
+  if (!guest) return res.status(404).json({ ok: false, error: 'Guest not found' });
 
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
-
-  const transporter = getTransporter();
-  try {
-    await transporter.verify();
-  } catch (err) {
-    send({ type: 'fatal', error: `SMTP connection failed: ${err.message}` });
-    return res.end();
-  }
-
-  for (const guest of targets) {
-    try {
-      // guests created before tracking support may not have an id yet
-      if (!guest.id) {
-        guest.id = crypto.randomUUID();
-        const withId = loadGuests();
-        const i = withId.findIndex(g => g.email === guest.email);
-        if (i !== -1) { withId[i].id = guest.id; saveGuests(withId); }
-      }
-
-      if (!EMAIL_RE.test(guest.email)) {
-        throw new Error('Invalid email address format');
-      }
-      send({ type: 'status', email: guest.email, name: guest.name, stage: 'validating' });
-      if (!(await domainHasMailServer(guest.email))) {
-        throw new Error(`"${guest.email.split('@')[1]}" has no mail server (MX/A record) — address can't receive email`);
-      }
-
-      send({ type: 'status', email: guest.email, name: guest.name, stage: 'generating' });
-      const body = await generateInvitation(guest, config);
-
-      // persist generated body immediately
-      const all = loadGuests();
-      const idx = all.findIndex(g => g.email === guest.email);
-      if (idx !== -1) { all[idx].body = body; saveGuests(all); }
-
-      send({ type: 'status', email: guest.email, name: guest.name, stage: 'sending' });
-      const html = textToHtml(body) + `<img src="${baseUrl}/api/track/${guest.id}.png" width="1" height="1" alt="" style="display:none">`;
-      await transporter.sendMail({
-        from: `"${config.fromName}" <${config.auth.user}>`,
-        to: guest.email,
-        subject: config.subject,
-        text: body,
-        html,
-      });
-
-      const all2 = loadGuests();
-      const idx2 = all2.findIndex(g => g.email === guest.email);
-      if (idx2 !== -1) {
-        all2[idx2].sent = true;
-        all2[idx2].sentAt = new Date().toISOString();
-        all2[idx2].failed = false;
-        all2[idx2].error = null;
-        saveGuests(all2);
-      }
-
-      send({ type: 'status', email: guest.email, name: guest.name, stage: 'done' });
-    } catch (err) {
-      const all3 = loadGuests();
-      const idx3 = all3.findIndex(g => g.email === guest.email);
-      if (idx3 !== -1) {
-        all3[idx3].sent = false;
-        all3[idx3].failed = true;
-        all3[idx3].failedAt = new Date().toISOString();
-        all3[idx3].error = err.message;
-        saveGuests(all3);
-      }
-      send({ type: 'status', email: guest.email, name: guest.name, stage: 'error', error: err.message });
+  const fail = async (message) => {
+    const all = await loadGuests();
+    const idx = all.findIndex(g => g.email === email);
+    if (idx !== -1) {
+      all[idx].sent = false;
+      all[idx].failed = true;
+      all[idx].failedAt = new Date().toISOString();
+      all[idx].error = message;
+      await saveGuests(all);
     }
-    await new Promise(r => setTimeout(r, 1500)); // throttle between guests
+    return res.json({ ok: false, error: message });
+  };
+
+  try {
+    // guests created before tracking support may not have an id yet
+    if (!guest.id) {
+      guest.id = crypto.randomUUID();
+      const withId = await loadGuests();
+      const i = withId.findIndex(g => g.email === email);
+      if (i !== -1) { withId[i].id = guest.id; await saveGuests(withId); }
+    }
+
+    if (!EMAIL_RE.test(guest.email)) {
+      return fail('Invalid email address format');
+    }
+    if (!(await domainHasMailServer(guest.email))) {
+      return fail(`"${guest.email.split('@')[1]}" has no mail server (MX/A record) — address can't receive email`);
+    }
+
+    const transporter = getTransporter();
+    try {
+      await transporter.verify();
+    } catch (err) {
+      return fail(`SMTP connection failed: ${err.message}`);
+    }
+
+    const body = await generateInvitation(guest, config);
+
+    const withBody = await loadGuests();
+    const bodyIdx = withBody.findIndex(g => g.email === email);
+    if (bodyIdx !== -1) { withBody[bodyIdx].body = body; await saveGuests(withBody); }
+
+    const html = textToHtml(body) + `<img src="${baseUrl}/api/track/${guest.id}.png" width="1" height="1" alt="" style="display:none">`;
+    await transporter.sendMail({
+      from: `"${config.fromName}" <${config.auth.user}>`,
+      to: guest.email,
+      subject: config.subject,
+      text: body,
+      html,
+    });
+
+    const all2 = await loadGuests();
+    const idx2 = all2.findIndex(g => g.email === email);
+    if (idx2 !== -1) {
+      all2[idx2].sent = true;
+      all2[idx2].sentAt = new Date().toISOString();
+      all2[idx2].failed = false;
+      all2[idx2].error = null;
+      await saveGuests(all2);
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    fail(err.message);
   }
-
-  send({ type: 'complete' });
-  res.end();
 });
 
-const PORT = process.env.PORT || 3344;
-app.listen(PORT, () => {
-  console.log(`\nKianistan Podcast mailer running.\nOpen this in your browser: http://localhost:${PORT}\n`);
-});
+if (require.main === module) {
+  const PORT = process.env.PORT || 3344;
+  app.listen(PORT, () => {
+    console.log(`\nKianistan Podcast mailer running.\nOpen this in your browser: http://localhost:${PORT}\n`);
+  });
+}
+
+module.exports = app;

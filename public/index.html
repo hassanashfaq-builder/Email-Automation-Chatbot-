@@ -384,6 +384,8 @@ function parseCsv(text) {
 }
 
 // ---- generate & send ----
+// One request per guest (rather than one long streamed batch) so each call
+// finishes quickly on its own — the client drives the pacing between guests.
 sendBtn.onclick = async () => {
   const emails = [...guestRows.querySelectorAll('input[type=checkbox]:checked')].map(cb => cb.dataset.email);
   if (!emails.length) return;
@@ -393,50 +395,41 @@ sendBtn.onclick = async () => {
   const originalText = sendBtn.textContent;
   sendBtn.innerHTML = '<span class="spinner"></span> Working...';
 
-  emails.forEach(email => {
-    const el = document.getElementById('status-' + cssId(email));
-    if (el) { el.className = 'status pending'; el.textContent = 'Queued'; }
-  });
-
-  const res = await fetch('/api/process', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ emails })
-  });
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
   let sentCount = 0, errorCount = 0;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n\n');
-    buffer = lines.pop();
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const evt = JSON.parse(line.slice(6));
+  for (const email of emails) {
+    const guest = guests.find(g => g.email === email);
+    const el = document.getElementById('status-' + cssId(email));
+    if (el) { el.className = 'status generating'; el.textContent = 'Writing & sending...'; }
 
-      if (evt.type === 'fatal') {
-        showToast(evt.error, true);
-        continue;
+    try {
+      const res = await fetch('/api/process-one', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const result = await res.json();
+
+      if (result.ok) {
+        sentCount++;
+        if (el) { el.className = 'status sent'; el.textContent = '✓ Sent'; }
+      } else {
+        errorCount++;
+        if (el) { el.className = 'status error'; el.textContent = 'Failed'; }
+        showToast(`Failed for ${guest ? guest.name : email}: ${result.error}`, true);
       }
-      if (evt.type === 'complete') {
-        sendBtn.disabled = false;
-        sendBtn.textContent = originalText;
-        showToast(`Done — ${sentCount} sent${errorCount ? `, ${errorCount} failed` : ''}`, errorCount > 0);
-        loadGuests();
-        continue;
-      }
-      const el = document.getElementById('status-' + cssId(evt.email));
-      if (evt.stage === 'validating') { if (el) { el.className = 'status generating'; el.textContent = 'Checking address...'; } }
-      if (evt.stage === 'generating') { if (el) { el.className = 'status generating'; el.textContent = 'Writing email...'; } }
-      if (evt.stage === 'sending') { if (el) { el.className = 'status sending'; el.textContent = 'Sending...'; } }
-      if (evt.stage === 'done') { sentCount++; if (el) { el.className = 'status sent'; el.textContent = '✓ Sent'; } }
-      if (evt.stage === 'error') { errorCount++; if (el) { el.className = 'status error'; el.textContent = 'Failed'; } showToast(`Failed for ${evt.name}: ${evt.error}`, true); }
+    } catch (err) {
+      errorCount++;
+      if (el) { el.className = 'status error'; el.textContent = 'Failed'; }
+      showToast(`Failed for ${guest ? guest.name : email}: ${err.message}`, true);
     }
+
+    await new Promise(r => setTimeout(r, 1200)); // throttle between guests
   }
+
+  sendBtn.disabled = false;
+  sendBtn.textContent = originalText;
+  showToast(`Done — ${sentCount} sent${errorCount ? `, ${errorCount} failed` : ''}`, errorCount > 0);
+  loadGuests();
 };
 
 function showToast(msg, isError) {
