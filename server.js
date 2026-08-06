@@ -75,6 +75,26 @@ function getTransporter() {
   });
 }
 
+// SMTP 4xx codes (and connection-level errors) are temporary — worth a
+// short retry. A 5xx like "550 classified as SPAM" is the server's
+// permanent judgment on that exact message; retrying identical content
+// immediately will just get rejected again, so those fail immediately.
+function isRetryableSmtpError(err) {
+  if (err.responseCode) return err.responseCode >= 400 && err.responseCode < 500;
+  return ['ETIMEDOUT', 'ECONNRESET', 'ESOCKET', 'ECONNECTION'].includes(err.code);
+}
+
+async function sendMailWithRetry(transporter, mail, attempts = 2) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await transporter.sendMail(mail);
+    } catch (err) {
+      if (attempt === attempts || !isRetryableSmtpError(err)) throw err;
+      await new Promise(r => setTimeout(r, 1500 * attempt));
+    }
+  }
+}
+
 app.get('/api/guests', async (req, res) => res.json(await loadGuests()));
 
 // Import guests (from paste or CSV upload). Merges by email — updates existing, adds new.
@@ -212,7 +232,7 @@ app.post('/api/process-one', async (req, res) => {
     if (bodyIdx !== -1) { withBody[bodyIdx].body = body; await saveGuests(withBody); }
 
     const html = textToHtml(body) + `<img src="${baseUrl}/api/track/${guest.id}.png" width="1" height="1" alt="" style="display:none">`;
-    await transporter.sendMail({
+    await sendMailWithRetry(transporter, {
       from: `"${config.fromName}" <${config.auth.user}>`,
       to: guest.email,
       subject: config.subject,

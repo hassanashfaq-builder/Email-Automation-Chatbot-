@@ -112,6 +112,7 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
     <div class="toolbar">
       <button class="secondary" id="selectAllBtn">Select all</button>
       <button class="secondary" id="selectNoneBtn">Select none</button>
+      <button class="secondary" id="selectFailedBtn">Select failed</button>
       <span style="flex:1"></span>
       <button id="sendBtn">Generate &amp; Send (0)</button>
     </div>
@@ -307,6 +308,11 @@ document.getElementById('closeModal').onclick = () => document.getElementById('m
 
 document.getElementById('selectAllBtn').onclick = () => { guestRows.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = true); updateSendCount(); };
 document.getElementById('selectNoneBtn').onclick = () => { guestRows.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false); updateSendCount(); };
+document.getElementById('selectFailedBtn').onclick = () => {
+  const failedEmails = new Set(guests.filter(g => g.failed && !g.sent).map(g => g.email));
+  guestRows.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = failedEmails.has(cb.dataset.email));
+  updateSendCount();
+};
 
 // ---- import: paste ----
 // Auto-detects the delimiter (tab from a spreadsheet paste, or | for the
@@ -473,7 +479,7 @@ sendBtn.onclick = async () => {
       showToast(`Failed for ${guest ? guest.name : email}: ${err.message}`, true);
     }
 
-    await new Promise(r => setTimeout(r, 1200)); // throttle between guests
+    await new Promise(r => setTimeout(r, 2000)); // throttle between guests
   }
 
   sendBtn.disabled = false;
