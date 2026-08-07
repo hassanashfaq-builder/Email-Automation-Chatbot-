@@ -114,8 +114,6 @@
   .stat-card2 .stat-num { font-size: 28px; font-weight: 700; line-height: 1; }
   .stat-card2[data-stat="sent"] .stat-num, .stat-card2[data-astat="sent"] .stat-num { color: var(--yellow); }
   .stat-card2[data-stat="delivered"] .stat-num, .stat-card2[data-astat="delivered"] .stat-num { color: var(--green); }
-  .stat-card2[data-stat="opened"] .stat-num, .stat-card2[data-astat="opened"] .stat-num { color: var(--accent); }
-  .stat-card2[data-stat="replies"] .stat-num, .stat-card2[data-astat="replied"] .stat-num { color: var(--purple); }
   .stat-card2[data-stat="notDelivered"] .stat-num, .stat-card2[data-astat="notDelivered"] .stat-num { color: var(--red); }
   .stat-card2 .stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
 
@@ -244,16 +242,6 @@
           <div class="stat-top"><div class="stat-icon delivered"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div><div class="stat-label">Delivered</div></div>
           <div class="stat-num" id="qDeliveredNum">0</div>
           <div class="stat-sub" id="qDeliveredSub">0% of sent</div>
-        </div>
-        <div class="stat-card2" data-stat="opened">
-          <div class="stat-top"><div class="stat-icon opened"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div><div class="stat-label">Opened</div></div>
-          <div class="stat-num" id="qOpenedNum">0</div>
-          <div class="stat-sub" id="qOpenedSub">0% open rate</div>
-        </div>
-        <div class="stat-card2" data-stat="replies">
-          <div class="stat-top"><div class="stat-icon replies"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></div><div class="stat-label">Replied</div></div>
-          <div class="stat-num" id="qRepliesNum">0</div>
-          <div class="stat-sub">Not tracked yet</div>
         </div>
         <div class="stat-card2" data-stat="notDelivered">
           <div class="stat-top"><div class="stat-icon failed"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div><div class="stat-label">Failed</div></div>
@@ -401,14 +389,6 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
         <div class="stat-card2" data-astat="delivered">
           <div class="stat-top"><div class="stat-icon delivered"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div><div class="stat-label">Delivered</div></div>
           <div class="stat-num" id="statDeliveredNum">0</div>
-        </div>
-        <div class="stat-card2" data-astat="opened">
-          <div class="stat-top"><div class="stat-icon opened"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div><div class="stat-label">Opened</div></div>
-          <div class="stat-num" id="statOpenedNum">0</div>
-        </div>
-        <div class="stat-card2" data-astat="replied">
-          <div class="stat-top"><div class="stat-icon replies"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></div><div class="stat-label">Replied</div></div>
-          <div class="stat-num" id="statRepliedNum">0</div>
         </div>
         <div class="stat-card2" data-astat="notDelivered">
           <div class="stat-top"><div class="stat-icon failed"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div><div class="stat-label">Failed</div></div>
@@ -762,16 +742,13 @@ function renderAnalytics() {
   const list = analyticsGuests();
   const sent = list.filter(g => g.sent).map(g => ({ name: g.name, email: g.email, sentAt: g.sentAt }));
   const delivered = list.filter(g => ['delivered', 'opened'].includes(guestDeliveryState(g))).map(g => ({ name: g.name, email: g.email, sentAt: g.sentAt }));
-  const opened = list.filter(g => g.opened).map(g => ({ name: g.name, email: g.email, openedAt: g.openedAt, openCount: g.openCount || 0 }));
   const notDelivered = list.filter(g => g.failed).map(g => ({ name: g.name, email: g.email, failedAt: g.failedAt, error: g.error }));
 
-  statsData = { sent, delivered, opened, replied: [], notDelivered };
+  statsData = { sent, delivered, notDelivered };
 
   document.getElementById('statLastSynced').textContent = 'Last synced: ' + new Date().toLocaleTimeString();
   document.getElementById('statSentNum').textContent = sent.length;
   document.getElementById('statDeliveredNum').textContent = delivered.length;
-  document.getElementById('statOpenedNum').textContent = opened.length;
-  document.getElementById('statRepliedNum').textContent = 0;
   document.getElementById('statNotDeliveredNum').textContent = notDelivered.length;
   renderStatSection();
 }
@@ -789,8 +766,6 @@ async function loadAnalytics() {
 const STAT_META = {
   sent: { title: 'Sent', col: 'Sent at', field: 'sentAt' },
   delivered: { title: 'Delivered', col: 'Sent at', field: 'sentAt' },
-  opened: { title: 'Opened', col: 'Opened at', field: 'openedAt' },
-  replied: { title: 'Replied', col: '', field: '', note: "Reply tracking isn't available yet — it needs inbox access, which this app doesn't have." },
   notDelivered: { title: 'Not delivered (failed)', col: 'Error', field: 'error' },
 };
 
@@ -867,7 +842,6 @@ function renderQuickStats() {
   const total = guests.length;
   const sent = guests.filter(g => g.sent).length;
   const delivered = guests.filter(g => ['delivered', 'opened'].includes(guestDeliveryState(g))).length;
-  const opened = guests.filter(g => g.opened).length;
   const failed = guests.filter(g => g.failed).length;
   const pct = (n, d) => d ? Math.round((n / d) * 100) : 0;
 
@@ -875,8 +849,6 @@ function renderQuickStats() {
   document.getElementById('qSentSub').textContent = `${pct(sent, total)}% of guests`;
   document.getElementById('qDeliveredNum').textContent = delivered;
   document.getElementById('qDeliveredSub').textContent = `${pct(delivered, sent)}% of sent`;
-  document.getElementById('qOpenedNum').textContent = opened;
-  document.getElementById('qOpenedSub').textContent = `${pct(opened, sent)}% open rate`;
   document.getElementById('qFailedNum').textContent = failed;
   document.getElementById('qFailedSub').textContent = `${pct(failed, total)}% of guests`;
 }
