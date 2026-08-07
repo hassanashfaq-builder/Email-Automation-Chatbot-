@@ -70,12 +70,17 @@
   th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--border); }
   td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
   tr:last-child td { border-bottom: none; }
+  tr.row-removing { opacity: 0.4; pointer-events: none; transition: opacity 0.15s; }
   .name-cell { font-weight: 600; }
   .email-cell { color: var(--muted); }
   .link-btn { background: none; border: none; color: var(--accent); text-decoration: underline; cursor: pointer; font-size: 12px; padding: 0; margin-right: 10px; }
   .link-btn.danger { color: var(--red); }
-  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color: var(--yellow); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 4px; }
+  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+  .spinner.dark { border-color: rgba(0,0,0,0.15); border-top-color: var(--accent); }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .icon-spin svg { animation: spin 0.8s linear infinite; }
+  .table-loading-row td { padding: 36px 10px; text-align: center; color: var(--muted); font-size: 13px; }
+  .table-loading-row .spinner { border-color: rgba(255,255,255,0.12); border-top-color: var(--accent); width: 16px; height: 16px; margin-right: 8px; }
   .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 10; }
   .modal { background: var(--card); border: 1px solid var(--border); border-radius: 12px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; padding: 24px; }
   .modal pre { white-space: pre-wrap; font-family: inherit; font-size: 14px; line-height: 1.6; }
@@ -436,6 +441,41 @@ const ICON_KEBAB = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" 
 const ICON_CHEVRON_LEFT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
 const ICON_CHEVRON_RIGHT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
 
+// ---- loading-state helpers ----
+// Text button: swap its label for a spinner + loading text, disable it for
+// the duration of an async action, then always restore it afterward.
+// For buttons whose disabled state depends on app state (e.g. selection
+// count) rather than just "not currently loading", pass computeDisabled
+// so the restored state reflects reality instead of always re-enabling.
+async function withButtonLoading(btn, loadingLabel, fn, computeDisabled) {
+  const original = btn.innerHTML;
+  const wasDisabled = btn.disabled;
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> ${loadingLabel}`;
+  try {
+    return await fn();
+  } finally {
+    btn.innerHTML = original;
+    btn.disabled = computeDisabled ? computeDisabled() : wasDisabled;
+  }
+}
+
+// Icon-only button: spin the icon in place rather than replacing content.
+async function withIconLoading(btn, fn) {
+  btn.classList.add('icon-spin');
+  btn.disabled = true;
+  try {
+    return await fn();
+  } finally {
+    btn.classList.remove('icon-spin');
+    btn.disabled = false;
+  }
+}
+
+function tableLoadingRow(colspan, label) {
+  return `<tr class="table-loading-row"><td colspan="${colspan}"><span class="spinner"></span> ${label}</td></tr>`;
+}
+
 // ---- top-level nav ----
 function setActiveNav(view) {
   document.querySelectorAll('.sidebar-nav .navitem').forEach(x => x.classList.toggle('active', x.dataset.view === view));
@@ -457,15 +497,19 @@ document.getElementById('newTemplateBtn').onclick = () => {
   document.getElementById('templateNameInput').focus();
 };
 
-document.getElementById('refreshBtn').onclick = () => { loadGuests(); showToast('Refreshed'); };
+document.getElementById('refreshBtn').onclick = async () => {
+  await withIconLoading(document.getElementById('refreshBtn'), async () => {
+    await loadGuests();
+    showToast('Refreshed');
+  });
+};
 document.getElementById('bellBtn').onclick = () => showToast('No new notifications');
 
 document.getElementById('syncBtn').onclick = async () => {
-  const btn = document.getElementById('syncBtn');
-  btn.disabled = true;
-  await loadGuests();
-  btn.disabled = false;
-  showToast('Synced');
+  await withButtonLoading(document.getElementById('syncBtn'), 'Syncing...', async () => {
+    await loadGuests();
+    showToast('Synced');
+  });
 };
 
 async function loadConfig() {
@@ -500,9 +544,14 @@ function renderVarsPreview() {
 document.getElementById('templateSubjectInput').addEventListener('input', renderVarsPreview);
 document.getElementById('templateBodyInput').addEventListener('input', renderVarsPreview);
 
+let templatesLoadedOnce = false;
 async function loadTemplates() {
+  if (!templatesLoadedOnce) {
+    document.getElementById('templateRows').innerHTML = tableLoadingRow(4, 'Loading templates...');
+  }
   const res = await fetch('/api/templates');
   templates = await res.json();
+  templatesLoadedOnce = true;
   renderTemplateRows();
   renderTemplateSelect();
 }
@@ -575,6 +624,8 @@ document.getElementById('templateRows').addEventListener('click', async (e) => {
   }
   if (deleteId) {
     if (!confirm('Delete this template?')) return;
+    const row = e.target.closest('tr');
+    if (row) row.classList.add('row-removing');
     await fetch('/api/templates/' + deleteId, { method: 'DELETE' });
     showToast('Template deleted');
     loadTemplates();
@@ -601,10 +652,12 @@ document.getElementById('saveTemplateBtn').onclick = async () => {
 
   const url = editingTemplateId ? '/api/templates/' + editingTemplateId : '/api/templates';
   const method = editingTemplateId ? 'PUT' : 'POST';
-  await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, subject, body }) });
-  showToast(editingTemplateId ? 'Template updated' : 'Template added');
-  resetTemplateForm();
-  loadTemplates();
+  await withButtonLoading(document.getElementById('saveTemplateBtn'), editingTemplateId ? 'Saving...' : 'Adding...', async () => {
+    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, subject, body }) });
+    showToast(editingTemplateId ? 'Template updated' : 'Template added');
+    resetTemplateForm();
+    await loadTemplates();
+  });
 };
 
 renderVarsPreview();
@@ -613,9 +666,14 @@ renderVarsPreview();
 let statsData = null;
 let activeStat = 'delivered';
 
+let statsLoadedOnce = false;
 async function loadStats() {
+  if (!statsLoadedOnce) {
+    document.getElementById('statRows').innerHTML = tableLoadingRow(3, 'Loading stats...');
+  }
   const res = await fetch('/api/stats');
   statsData = await res.json();
+  statsLoadedOnce = true;
   document.getElementById('statLastSynced').textContent = 'Last synced: ' + new Date().toLocaleTimeString();
   document.getElementById('statDeliveredNum').textContent = statsData.totals.delivered;
   document.getElementById('statOpenedNum').textContent = statsData.totals.opened;
@@ -660,12 +718,9 @@ document.querySelectorAll('#analyticsView .stat-card2').forEach(card => card.onc
 });
 
 document.getElementById('syncStatsBtn').onclick = async () => {
-  const btn = document.getElementById('syncStatsBtn');
-  btn.disabled = true;
-  btn.textContent = 'Syncing...';
-  await loadStats();
-  btn.textContent = 'Sync now';
-  btn.disabled = false;
+  await withButtonLoading(document.getElementById('syncStatsBtn'), 'Syncing...', async () => {
+    await loadStats();
+  });
 };
 
 // quick stat cards on the Guests page (derived from the already-loaded guest list)
@@ -693,9 +748,14 @@ document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
 });
 
 // ---- load guests ----
+let guestsLoadedOnce = false;
 async function loadGuests() {
+  if (!guestsLoadedOnce) {
+    guestRows.innerHTML = tableLoadingRow(7, 'Loading guests...');
+  }
   const res = await fetch('/api/guests');
   guests = await res.json();
+  guestsLoadedOnce = true;
   // default newly-seen, not-yet-sent guests to checked (once) so a fresh
   // list can be sent immediately without manually selecting everything —
   // but never re-check something the user deliberately unchecked before.
@@ -860,6 +920,8 @@ guestRows.addEventListener('click', async (e) => {
   }
   if (removeBtn) {
     guestRows.querySelectorAll('.kebab-menu.open').forEach(m => m.classList.remove('open'));
+    const row = removeBtn.closest('tr');
+    if (row) row.classList.add('row-removing');
     await fetch('/api/guests/' + encodeURIComponent(removeBtn.dataset.remove), { method: 'DELETE' });
     checkedEmails.delete(removeBtn.dataset.remove);
     loadGuests();
@@ -873,19 +935,21 @@ document.getElementById('saveEditBtn').onclick = async () => {
   const background = document.getElementById('editBackgroundInput').value.trim();
   if (!email) { showToast('Email is required', true); return; }
 
-  const guest = guests.find(g => g.email === editingGuestEmail);
-  const res = await fetch('/api/guests/' + encodeURIComponent(guest.id), {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, email, background })
+  await withButtonLoading(document.getElementById('saveEditBtn'), 'Saving...', async () => {
+    const guest = guests.find(g => g.email === editingGuestEmail);
+    const res = await fetch('/api/guests/' + encodeURIComponent(guest.id), {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, background })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast(err.error || 'Failed to save changes', true);
+      return;
+    }
+    document.getElementById('editModalBackdrop').style.display = 'none';
+    showToast('Guest updated');
+    await loadGuests();
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    showToast(err.error || 'Failed to save changes', true);
-    return;
-  }
-  document.getElementById('editModalBackdrop').style.display = 'none';
-  showToast('Guest updated');
-  loadGuests();
 };
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.actions-cell')) guestRows.querySelectorAll('.kebab-menu.open').forEach(m => m.classList.remove('open'));
@@ -914,13 +978,15 @@ deleteBtn.onclick = async () => {
     ? `Delete ALL ${emails.length} guest(s) from the list? This cannot be undone.`
     : `Delete ${emails.length} selected guest(s)? This cannot be undone.`;
   if (!confirm(msg)) return;
-  await fetch('/api/guests/delete-bulk', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(allSelected ? { all: true } : { emails })
-  });
-  showToast(`Deleted ${emails.length} guest(s)`);
-  checkedEmails.clear();
-  loadGuests();
+  await withButtonLoading(deleteBtn, 'Deleting...', async () => {
+    await fetch('/api/guests/delete-bulk', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(allSelected ? { all: true } : { emails })
+    });
+    showToast(`Deleted ${emails.length} guest(s)`);
+    checkedEmails.clear();
+    await loadGuests();
+  }, () => checkedEmails.size === 0);
 };
 
 // ---- import: paste ----
@@ -991,14 +1057,16 @@ document.getElementById('importPasteBtn').onclick = async () => {
 
   if (!parsed.length) { showToast('No rows with a detectable email address were found.', true); return; }
 
-  await fetch('/api/guests/import', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ guests: parsed })
+  await withButtonLoading(document.getElementById('importPasteBtn'), 'Adding...', async () => {
+    await fetch('/api/guests/import', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guests: parsed })
+    });
+    document.getElementById('pasteArea').value = '';
+    updatePastePreviewCount();
+    showToast(`Added ${parsed.length} guest(s)` + (skipped.length ? ` — skipped ${skipped.length} row(s) with no detectable email` : ''), skipped.length > 0);
+    await loadGuests();
   });
-  document.getElementById('pasteArea').value = '';
-  updatePastePreviewCount();
-  showToast(`Added ${parsed.length} guest(s)` + (skipped.length ? ` — skipped ${skipped.length} row(s) with no detectable email` : ''), skipped.length > 0);
-  loadGuests();
 };
 
 // ---- CSV dropzone ----
@@ -1071,14 +1139,16 @@ document.getElementById('importCsvBtn').onclick = async () => {
 
   if (!parsed.length) { showToast('No valid rows found in CSV', true); return; }
 
-  await fetch('/api/guests/import', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ guests: parsed })
+  await withButtonLoading(document.getElementById('importCsvBtn'), 'Adding...', async () => {
+    await fetch('/api/guests/import', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guests: parsed })
+    });
+    csvFileInput.value = '';
+    updateDropzoneDisplay();
+    showToast(`Added ${parsed.length} guest(s) from CSV`);
+    await loadGuests();
   });
-  csvFileInput.value = '';
-  updateDropzoneDisplay();
-  showToast(`Added ${parsed.length} guest(s) from CSV`);
-  loadGuests();
 };
 
 function parseCsv(text) {
