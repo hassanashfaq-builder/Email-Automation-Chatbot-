@@ -107,7 +107,7 @@ async function sendMailWithRetry(transporter, mail, attempts = 2) {
   }
 }
 
-app.get('/api/config', (req, res) => res.json({ fromEmail: config.auth.user }));
+app.get('/api/config', (req, res) => res.json({ fromEmail: config.auth.user, openTrackingEnabled }));
 
 app.get('/api/guests', async (req, res) => res.json(await loadGuests()));
 
