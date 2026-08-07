@@ -104,15 +104,17 @@
   .stat-card2.active { border-color: var(--accent); background: #1c2130; }
   .stat-card2 .stat-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
   .stat-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .stat-icon.sent { background: rgba(245,192,74,0.15); color: var(--yellow); }
   .stat-icon.delivered { background: rgba(62,207,142,0.15); color: var(--green); }
   .stat-icon.opened { background: rgba(59,111,237,0.15); color: var(--accent); }
   .stat-icon.replies { background: rgba(177,131,245,0.15); color: var(--purple); }
   .stat-icon.failed { background: rgba(255,107,107,0.15); color: var(--red); }
   .stat-card2 .stat-label { font-size: 13px; color: var(--muted); font-weight: 500; }
   .stat-card2 .stat-num { font-size: 28px; font-weight: 700; line-height: 1; }
+  .stat-card2[data-stat="sent"] .stat-num, .stat-card2[data-astat="sent"] .stat-num { color: var(--yellow); }
   .stat-card2[data-stat="delivered"] .stat-num, .stat-card2[data-astat="delivered"] .stat-num { color: var(--green); }
   .stat-card2[data-stat="opened"] .stat-num, .stat-card2[data-astat="opened"] .stat-num { color: var(--accent); }
-  .stat-card2[data-stat="replies"] .stat-num { color: var(--purple); }
+  .stat-card2[data-stat="replies"] .stat-num, .stat-card2[data-astat="replied"] .stat-num { color: var(--purple); }
   .stat-card2[data-stat="notDelivered"] .stat-num, .stat-card2[data-astat="notDelivered"] .stat-num { color: var(--red); }
   .stat-card2 .stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
 
@@ -153,11 +155,27 @@
   /* ---- status dot ---- */
   .status-dot { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
   .status-dot .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .status-dot.sent .dot { background: var(--yellow); } .status-dot.sent { color: var(--yellow); }
   .status-dot.delivered .dot { background: var(--green); } .status-dot.delivered { color: var(--green); }
   .status-dot.opened .dot { background: var(--accent); } .status-dot.opened { color: var(--accent); }
   .status-dot.failed .dot { background: var(--red); } .status-dot.failed { color: var(--red); }
   .status-dot.pending .dot { background: var(--muted); } .status-dot.pending { color: var(--muted); }
   .status-dot.working .dot { background: var(--yellow); } .status-dot.working { color: var(--yellow); }
+
+  /* ---- send progress modal ---- */
+  .send-modal { max-width: 420px; text-align: center; }
+  .send-spinner-lg { width: 42px; height: 42px; border: 4px solid rgba(59,111,237,0.15); border-top-color: var(--accent); border-radius: 50%; margin: 4px auto 0; animation: spin 0.8s linear infinite; }
+  .send-modal h3 { margin: 16px 0 4px; font-size: 15px; }
+  .send-progress-count { font-size: 22px; font-weight: 700; margin: 10px 0 14px; }
+  .progress-track { background: #0d0f13; border: 1px solid var(--border); border-radius: 20px; height: 8px; overflow: hidden; margin-bottom: 10px; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 20px; transition: width 0.25s ease; width: 0%; }
+  .send-current-name { font-size: 12.5px; color: var(--muted); min-height: 16px; }
+  .send-result-icon { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto; background: rgba(62,207,142,0.15); color: var(--green); }
+  .send-result-grid { display: flex; gap: 10px; justify-content: center; margin-top: 4px; }
+  .send-result-item { flex: 1; background: #14161c; border: 1px solid var(--border); border-radius: 10px; padding: 14px 8px; }
+  .send-result-num { font-size: 24px; font-weight: 700; }
+  .send-result-label { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+  #sendModalCloseBtn { width: 100%; justify-content: center; margin-top: 18px; }
 
   /* ---- kebab menu ---- */
   .actions-cell { position: relative; display: flex; align-items: center; gap: 8px; }
@@ -217,10 +235,15 @@
     <div id="guestsView">
 
       <div class="stat-cards">
+        <div class="stat-card2" data-stat="sent">
+          <div class="stat-top"><div class="stat-icon sent"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div><div class="stat-label">Sent</div></div>
+          <div class="stat-num" id="qSentNum">0</div>
+          <div class="stat-sub" id="qSentSub">0% of guests</div>
+        </div>
         <div class="stat-card2" data-stat="delivered">
-          <div class="stat-top"><div class="stat-icon delivered"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div><div class="stat-label">Delivered</div></div>
+          <div class="stat-top"><div class="stat-icon delivered"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div><div class="stat-label">Delivered</div></div>
           <div class="stat-num" id="qDeliveredNum">0</div>
-          <div class="stat-sub" id="qDeliveredSub">0% of guests</div>
+          <div class="stat-sub" id="qDeliveredSub">0% of sent</div>
         </div>
         <div class="stat-card2" data-stat="opened">
           <div class="stat-top"><div class="stat-icon opened"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div><div class="stat-label">Opened</div></div>
@@ -228,7 +251,7 @@
           <div class="stat-sub" id="qOpenedSub">0% open rate</div>
         </div>
         <div class="stat-card2" data-stat="replies">
-          <div class="stat-top"><div class="stat-icon replies"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></div><div class="stat-label">Replies</div></div>
+          <div class="stat-top"><div class="stat-icon replies"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></div><div class="stat-label">Replied</div></div>
           <div class="stat-num" id="qRepliesNum">0</div>
           <div class="stat-sub">Not tracked yet</div>
         </div>
@@ -362,16 +385,24 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
         <button class="secondary" id="syncStatsBtn">Sync now</button>
       </div>
       <div class="stat-cards">
+        <div class="stat-card2" data-astat="sent">
+          <div class="stat-top"><div class="stat-icon sent"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div><div class="stat-label">Sent</div></div>
+          <div class="stat-num" id="statSentNum">0</div>
+        </div>
         <div class="stat-card2" data-astat="delivered">
-          <div class="stat-top"><div class="stat-icon delivered"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div><div class="stat-label">Delivered</div></div>
+          <div class="stat-top"><div class="stat-icon delivered"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div><div class="stat-label">Delivered</div></div>
           <div class="stat-num" id="statDeliveredNum">0</div>
         </div>
         <div class="stat-card2" data-astat="opened">
           <div class="stat-top"><div class="stat-icon opened"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div><div class="stat-label">Opened</div></div>
           <div class="stat-num" id="statOpenedNum">0</div>
         </div>
+        <div class="stat-card2" data-astat="replied">
+          <div class="stat-top"><div class="stat-icon replies"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg></div><div class="stat-label">Replied</div></div>
+          <div class="stat-num" id="statRepliedNum">0</div>
+        </div>
         <div class="stat-card2" data-astat="notDelivered">
-          <div class="stat-top"><div class="stat-icon failed"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div><div class="stat-label">Not delivered (failed)</div></div>
+          <div class="stat-top"><div class="stat-icon failed"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div><div class="stat-label">Failed</div></div>
           <div class="stat-num" id="statNotDeliveredNum">0</div>
         </div>
       </div>
@@ -421,6 +452,37 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
   </div>
 </div>
 
+<div class="modal-backdrop" id="sendModalBackdrop">
+  <div class="modal send-modal">
+    <div id="sendProgressView">
+      <div class="send-spinner-lg"></div>
+      <h3>Sending invitations…</h3>
+      <div class="send-progress-count" id="sendProgressCount">0 / 0</div>
+      <div class="progress-track"><div class="progress-fill" id="sendProgressFill"></div></div>
+      <div class="send-current-name" id="sendCurrentName"></div>
+    </div>
+    <div id="sendResultView" style="display:none">
+      <div class="send-result-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+      <h3>Sending complete</h3>
+      <div class="send-result-grid">
+        <div class="send-result-item">
+          <div class="send-result-num" id="resultTotalNum" style="color:var(--yellow)">0</div>
+          <div class="send-result-label">Sent</div>
+        </div>
+        <div class="send-result-item">
+          <div class="send-result-num" id="resultDeliveredNum" style="color:var(--green)">0</div>
+          <div class="send-result-label">Delivered</div>
+        </div>
+        <div class="send-result-item">
+          <div class="send-result-num" id="resultFailedNum" style="color:var(--red)">0</div>
+          <div class="send-result-label">Failed</div>
+        </div>
+      </div>
+      <button id="sendModalCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-container" id="toastContainer"></div>
 
 <script>
@@ -440,6 +502,20 @@ const ICON_EYE = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" st
 const ICON_KEBAB = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>';
 const ICON_CHEVRON_LEFT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
 const ICON_CHEVRON_RIGHT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+const ICON_RETRY = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
+
+// Kept in sync with DELIVERED_GRACE_MS in server.js — with no bounce-webhook
+// or inbox access to confirm real delivery, "delivered" is a heuristic:
+// sent, not failed, and either opened or old enough that a bounce (which
+// we already catch synchronously as a send failure) would have shown up.
+const DELIVERED_GRACE_MS = 2 * 60 * 1000;
+function guestDeliveryState(g) {
+  if (g.failed) return 'failed';
+  if (!g.sent) return 'pending';
+  if (g.opened) return 'opened';
+  const age = Date.now() - new Date(g.sentAt).getTime();
+  return age >= DELIVERED_GRACE_MS ? 'delivered' : 'sent';
+}
 
 // ---- loading-state helpers ----
 // Text button: swap its label for a spinner + loading text, disable it for
@@ -675,15 +751,19 @@ async function loadStats() {
   statsData = await res.json();
   statsLoadedOnce = true;
   document.getElementById('statLastSynced').textContent = 'Last synced: ' + new Date().toLocaleTimeString();
+  document.getElementById('statSentNum').textContent = statsData.totals.sent;
   document.getElementById('statDeliveredNum').textContent = statsData.totals.delivered;
   document.getElementById('statOpenedNum').textContent = statsData.totals.opened;
+  document.getElementById('statRepliedNum').textContent = statsData.totals.replied;
   document.getElementById('statNotDeliveredNum').textContent = statsData.totals.notDelivered;
   renderStatSection();
 }
 
 const STAT_META = {
+  sent: { title: 'Sent', col: 'Sent at', field: 'sentAt' },
   delivered: { title: 'Delivered', col: 'Sent at', field: 'sentAt' },
   opened: { title: 'Opened', col: 'Opened at', field: 'openedAt' },
+  replied: { title: 'Replied', col: '', field: '', note: "Reply tracking isn't available yet — it needs inbox access, which this app doesn't have." },
   notDelivered: { title: 'Not delivered (failed)', col: 'Error', field: 'error' },
 };
 
@@ -701,6 +781,7 @@ function renderStatSection() {
       <td>${escapeHtml(formatStatExtra(g, meta.field))}</td>
     </tr>
   `).join('');
+  document.getElementById('statEmptyHint').textContent = meta.note || 'Nothing here yet';
   document.getElementById('statEmptyHint').style.display = rows.length ? 'none' : 'block';
 }
 
@@ -726,18 +807,26 @@ document.getElementById('syncStatsBtn').onclick = async () => {
 // quick stat cards on the Guests page (derived from the already-loaded guest list)
 function renderQuickStats() {
   const total = guests.length;
-  const delivered = guests.filter(g => g.sent).length;
+  const sent = guests.filter(g => g.sent).length;
+  const delivered = guests.filter(g => ['delivered', 'opened'].includes(guestDeliveryState(g))).length;
   const opened = guests.filter(g => g.opened).length;
-  const failed = guests.filter(g => g.failed && !g.sent).length;
+  const failed = guests.filter(g => g.failed).length;
   const pct = (n, d) => d ? Math.round((n / d) * 100) : 0;
 
+  document.getElementById('qSentNum').textContent = sent;
+  document.getElementById('qSentSub').textContent = `${pct(sent, total)}% of guests`;
   document.getElementById('qDeliveredNum').textContent = delivered;
-  document.getElementById('qDeliveredSub').textContent = `${pct(delivered, total)}% of guests`;
+  document.getElementById('qDeliveredSub').textContent = `${pct(delivered, sent)}% of sent`;
   document.getElementById('qOpenedNum').textContent = opened;
-  document.getElementById('qOpenedSub').textContent = `${pct(opened, delivered)}% open rate`;
+  document.getElementById('qOpenedSub').textContent = `${pct(opened, sent)}% open rate`;
   document.getElementById('qFailedNum').textContent = failed;
   document.getElementById('qFailedSub').textContent = `${pct(failed, total)}% of guests`;
 }
+
+// Statuses are time-based (sent -> delivered), so re-render periodically
+// even without a fresh fetch — no network call, just recomputes from the
+// guest list already in memory.
+setInterval(() => { if (guests.length) { render(); renderQuickStats(); } }, 30000);
 
 // ---- tabs (Add Guests: paste / CSV) ----
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
@@ -784,9 +873,9 @@ function applyFilters() {
 document.getElementById('searchInput').addEventListener('input', () => { currentPage = 1; applyFilters(); });
 
 function statusInfo(g) {
-  if (g.sent) return g.opened ? { cls: 'opened', label: 'Opened' } : { cls: 'delivered', label: 'Delivered' };
-  if (g.failed) return { cls: 'failed', label: 'Failed' };
-  return { cls: 'pending', label: 'Pending' };
+  const state = guestDeliveryState(g);
+  const labels = { failed: 'Failed', pending: 'Pending', sent: 'Sent', delivered: 'Delivered', opened: 'Opened' };
+  return { cls: state, label: labels[state] };
 }
 
 function relativeTime(iso) {
@@ -819,6 +908,7 @@ function render() {
       <td>${escapeHtml(g.templateName || '—')}</td>
       <td>${relativeTime(g.sentAt)}</td>
       <td class="actions-cell" style="justify-content:flex-end">
+        ${st.cls === 'failed' ? `<button class="icon-btn" title="Retry send" data-retry="${g.email}" style="width:30px;height:30px">${ICON_RETRY}</button>` : ''}
         ${g.body ? `<button class="icon-btn" title="Preview" data-preview="${g.email}" style="width:30px;height:30px">${ICON_EYE}</button>` : ''}
         <button class="kebab-btn" data-kebab="${g.email}">${ICON_KEBAB}</button>
         <div class="kebab-menu" data-kebab-menu="${g.email}">
@@ -887,6 +977,23 @@ guestRows.addEventListener('change', (e) => {
 
 let editingGuestEmail = null;
 
+// Sends (or resends) a single guest via the per-guest endpoint. Shared by
+// the bulk send loop and the per-row Retry button.
+async function sendOneGuest(email, templateId) {
+  const el = document.getElementById('status-' + cssId(email));
+  if (el) { el.className = 'status-dot working'; el.innerHTML = '<span class="dot"></span>Sending...'; }
+  try {
+    const res = await fetch('/api/process-one', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, templateId })
+    });
+    const result = await res.json();
+    return result.ok ? { ok: true } : { ok: false, error: result.error };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
 guestRows.addEventListener('click', async (e) => {
   // use closest() rather than e.target directly — clicking the icon glyph
   // itself (an SVG child) makes e.target the svg/path, not the button that
@@ -896,6 +1003,20 @@ guestRows.addEventListener('click', async (e) => {
   const kebabBtn = e.target.closest('[data-kebab]');
   const editBtn = e.target.closest('[data-edit]');
   const removeBtn = e.target.closest('[data-remove]');
+  const retryBtn = e.target.closest('[data-retry]');
+
+  if (retryBtn) {
+    const email = retryBtn.dataset.retry;
+    const guest = guests.find(x => x.email === email);
+    const templateId = guest?.templateId || selectedTemplateId || templates[0]?.id;
+    if (!templateId) { showToast('Add a template first (Templates tab)', true); return; }
+    await withIconLoading(retryBtn, async () => {
+      const result = await sendOneGuest(email, templateId);
+      showToast(result.ok ? `Resent to ${guest ? guest.name : email}` : `Failed for ${guest ? guest.name : email}: ${result.error}`, !result.ok);
+      await loadGuests();
+    });
+    return;
+  }
 
   if (previewBtn) {
     const g = guests.find(x => x.email === previewBtn.dataset.preview);
@@ -1176,6 +1297,36 @@ function parseCsv(text) {
 // ---- send invitations ----
 // One request per guest (rather than one long streamed batch) so each call
 // finishes quickly on its own — the client drives the pacing between guests.
+// Progress is shown in a modal (rather than just the button label) so it
+// can't be missed, and so the button being covered by the modal backdrop
+// makes it impossible to double-submit mid-send.
+function openSendModal(total) {
+  document.getElementById('sendProgressView').style.display = 'block';
+  document.getElementById('sendResultView').style.display = 'none';
+  document.getElementById('sendProgressFill').style.width = '0%';
+  document.getElementById('sendProgressCount').textContent = `0 / ${total}`;
+  document.getElementById('sendCurrentName').textContent = '';
+  document.getElementById('sendModalBackdrop').style.display = 'flex';
+}
+
+function updateSendModalProgress(done, total, currentName) {
+  document.getElementById('sendProgressCount').textContent = `${done} / ${total}`;
+  document.getElementById('sendProgressFill').style.width = `${Math.round((done / total) * 100)}%`;
+  document.getElementById('sendCurrentName').textContent = currentName ? `Sending to ${currentName}…` : '';
+}
+
+function showSendModalResult(total, deliveredCount, failedCount) {
+  document.getElementById('sendProgressView').style.display = 'none';
+  document.getElementById('sendResultView').style.display = 'block';
+  document.getElementById('resultTotalNum').textContent = total;
+  document.getElementById('resultDeliveredNum').textContent = deliveredCount;
+  document.getElementById('resultFailedNum').textContent = failedCount;
+}
+
+document.getElementById('sendModalCloseBtn').onclick = () => {
+  document.getElementById('sendModalBackdrop').style.display = 'none';
+};
+
 sendBtn.onclick = async () => {
   const emails = [...checkedEmails];
   if (!emails.length) return;
@@ -1184,46 +1335,24 @@ sendBtn.onclick = async () => {
   const templateName = templates.find(t => t.id === templateId)?.name || 'the selected template';
   if (!confirm(`Send "${templateName}" to ${emails.length} guest(s)? This will actually send real emails.`)) return;
 
-  sendBtn.disabled = true;
-  const originalText = sendBtn.textContent;
-  sendBtn.innerHTML = '<span class="spinner"></span> Working...';
+  openSendModal(emails.length);
+  let deliveredCount = 0, failedCount = 0;
 
-  let sentCount = 0, errorCount = 0;
-
-  for (const email of emails) {
+  for (let i = 0; i < emails.length; i++) {
+    const email = emails[i];
     const guest = guests.find(g => g.email === email);
-    const el = document.getElementById('status-' + cssId(email));
-    if (el) { el.className = 'status-dot working'; el.innerHTML = '<span class="dot"></span>Sending...'; }
+    updateSendModalProgress(i, emails.length, guest ? guest.name : email);
 
-    try {
-      const res = await fetch('/api/process-one', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, templateId })
-      });
-      const result = await res.json();
+    const result = await sendOneGuest(email, templateId);
+    if (result.ok) deliveredCount++; else failedCount++;
+    updateSendModalProgress(i + 1, emails.length, null);
 
-      if (result.ok) {
-        sentCount++;
-        if (el) { el.className = 'status-dot delivered'; el.innerHTML = '<span class="dot"></span>Delivered'; }
-      } else {
-        errorCount++;
-        if (el) { el.className = 'status-dot failed'; el.innerHTML = '<span class="dot"></span>Failed'; }
-        showToast(`Failed for ${guest ? guest.name : email}: ${result.error}`, true);
-      }
-    } catch (err) {
-      errorCount++;
-      if (el) { el.className = 'status-dot failed'; el.innerHTML = '<span class="dot"></span>Failed'; }
-      showToast(`Failed for ${guest ? guest.name : email}: ${err.message}`, true);
-    }
-
-    await new Promise(r => setTimeout(r, 3500)); // throttle between guests
+    if (i < emails.length - 1) await new Promise(r => setTimeout(r, 3500)); // throttle between guests
   }
 
-  sendBtn.disabled = false;
-  sendBtn.textContent = originalText;
-  showToast(`Done — ${sentCount} sent${errorCount ? `, ${errorCount} failed` : ''}`, errorCount > 0);
+  showSendModalResult(emails.length, deliveredCount, failedCount);
   checkedEmails.clear();
-  loadGuests();
+  await loadGuests();
 };
 
 function showToast(msg, isError) {

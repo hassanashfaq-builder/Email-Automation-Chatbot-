@@ -239,24 +239,44 @@ app.get('/api/track/:id.png', async (req, res) => {
   }
 });
 
+// No bounce-webhook or inbox access exists to confirm real delivery, so
+// "delivered" is a heuristic: sent, not failed, and either opened or old
+// enough that a bounce (which we catch synchronously as a send failure)
+// would already have shown up. Keep this in sync with DELIVERED_GRACE_MS
+// in public/index.html's statusInfo().
+const DELIVERED_GRACE_MS = 2 * 60 * 1000;
+
+function deliveryState(g) {
+  if (g.failed) return 'failed';
+  if (!g.sent) return 'pending';
+  if (g.opened) return 'opened';
+  const age = Date.now() - new Date(g.sentAt).getTime();
+  return age >= DELIVERED_GRACE_MS ? 'delivered' : 'sent';
+}
+
 app.get('/api/stats', async (req, res) => {
   const guests = await loadGuests();
   const pick = (g) => ({ name: g.name, email: g.email });
 
-  const delivered = guests.filter(g => g.sent).map(g => ({ ...pick(g), sentAt: g.sentAt }));
-  const notDelivered = guests.filter(g => g.failed).map(g => ({ ...pick(g), failedAt: g.failedAt, error: g.error }));
+  const sent = guests.filter(g => g.sent).map(g => ({ ...pick(g), sentAt: g.sentAt }));
+  const delivered = guests.filter(g => ['delivered', 'opened'].includes(deliveryState(g))).map(g => ({ ...pick(g), sentAt: g.sentAt }));
   const opened = guests.filter(g => g.opened).map(g => ({ ...pick(g), openedAt: g.openedAt, openCount: g.openCount || 0 }));
+  const notDelivered = guests.filter(g => g.failed).map(g => ({ ...pick(g), failedAt: g.failedAt, error: g.error }));
 
   res.json({
     totals: {
       total: guests.length,
+      sent: sent.length,
       delivered: delivered.length,
-      notDelivered: notDelivered.length,
       opened: opened.length,
+      replied: 0,
+      notDelivered: notDelivered.length,
     },
+    sent,
     delivered,
-    notDelivered,
     opened,
+    replied: [],
+    notDelivered,
   });
 });
 
