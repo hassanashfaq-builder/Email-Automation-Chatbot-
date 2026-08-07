@@ -54,7 +54,15 @@
   .tab.active { background: var(--accent); color: white; border-color: var(--accent); }
   textarea { width: 100%; min-height: 120px; background: #0d0f13; border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 10px; font-size: 13px; font-family: monospace; resize: vertical; }
   .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
-  input[type=file] { color: var(--muted); font-size: 13px; }
+  .dropzone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; border: 1.5px dashed var(--border); border-radius: 10px; padding: 32px 20px; cursor: pointer; background: #14161c; transition: border-color 0.15s, background 0.15s; }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: #171b26; }
+  .dropzone-icon { color: var(--muted); margin-bottom: 4px; }
+  .dropzone-text { font-size: 13.5px; color: var(--text); }
+  .dropzone-text strong { color: var(--accent); font-weight: 600; }
+  .dropzone-sub { font-size: 12px; color: var(--muted); }
+  .dropzone-file { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; margin-top: 6px; font-size: 13px; color: var(--text); }
+  .dropzone-file .remove-file { color: var(--muted); cursor: pointer; padding: 2px; border-radius: 4px; }
+  .dropzone-file .remove-file:hover { color: var(--red); background: rgba(255,107,107,0.1); }
   .row { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
   .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
   .count { color: var(--muted); font-size: 13px; }
@@ -230,7 +238,13 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
           </div>
 
           <div id="uploadTab" style="display:none">
-            <input type="file" id="csvFile" accept=".csv">
+            <label class="dropzone" id="dropzone" for="csvFile">
+              <input type="file" id="csvFile" accept=".csv" style="display:none">
+              <div class="dropzone-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+              <div class="dropzone-text"><strong>Click to upload</strong> or drag and drop</div>
+              <div class="dropzone-sub">CSV files only</div>
+              <div class="dropzone-file" id="dropzoneFile" style="display:none"></div>
+            </label>
             <div class="hint">CSV columns: name, email, background, topic (header row optional, name/topic optional)</div>
             <div class="row"><button id="importCsvBtn">Add to list</button></div>
           </div>
@@ -891,6 +905,52 @@ document.getElementById('importPasteBtn').onclick = async () => {
   loadGuests();
 };
 
+// ---- CSV dropzone ----
+const csvFileInput = document.getElementById('csvFile');
+const dropzone = document.getElementById('dropzone');
+const dropzoneFile = document.getElementById('dropzoneFile');
+
+function updateDropzoneDisplay() {
+  const file = csvFileInput.files[0];
+  dropzone.querySelector('.dropzone-icon').style.display = file ? 'none' : '';
+  dropzone.querySelector('.dropzone-text').style.display = file ? 'none' : '';
+  dropzone.querySelector('.dropzone-sub').style.display = file ? 'none' : '';
+  if (file) {
+    dropzoneFile.style.display = 'flex';
+    dropzoneFile.innerHTML = `
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <span>${escapeHtml(file.name)}</span>
+      <span class="remove-file" id="removeCsvFile" title="Remove"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+    `;
+    document.getElementById('removeCsvFile').onclick = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      csvFileInput.value = '';
+      updateDropzoneDisplay();
+    };
+  } else {
+    dropzoneFile.style.display = 'none';
+    dropzoneFile.innerHTML = '';
+  }
+}
+csvFileInput.addEventListener('change', updateDropzoneDisplay);
+
+['dragover', 'dragenter'].forEach(evt => dropzone.addEventListener(evt, (e) => {
+  e.preventDefault();
+  dropzone.classList.add('dragover');
+}));
+['dragleave', 'dragend'].forEach(evt => dropzone.addEventListener(evt, () => dropzone.classList.remove('dragover')));
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.csv')) { showToast('Please drop a .csv file', true); return; }
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  csvFileInput.files = dt.files;
+  updateDropzoneDisplay();
+});
+
 // ---- import: csv ----
 document.getElementById('importCsvBtn').onclick = async () => {
   const file = document.getElementById('csvFile').files[0];
@@ -919,7 +979,8 @@ document.getElementById('importCsvBtn').onclick = async () => {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ guests: parsed })
   });
-  document.getElementById('csvFile').value = '';
+  csvFileInput.value = '';
+  updateDropzoneDisplay();
   showToast(`Added ${parsed.length} guest(s) from CSV`);
   loadGuests();
 };
