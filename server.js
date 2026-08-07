@@ -20,10 +20,15 @@ function loadConfig() {
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     fromName: process.env.FROM_NAME,
     baseUrl: process.env.BASE_URL || 'http://localhost:3344',
+    enableOpenTracking: process.env.ENABLE_OPEN_TRACKING === 'true',
   };
 }
 const config = loadConfig();
 const baseUrl = config.baseUrl || 'http://localhost:3344';
+// Off by default: a hidden 1x1 tracking image is a classic spam-filter
+// trigger ("web bug" detection). Opt in explicitly once deliverability
+// is otherwise solid (e.g. SPF/DKIM/DMARC configured for the domain).
+const openTrackingEnabled = config.enableOpenTracking === true || config.enableOpenTracking === 'true';
 
 // 1x1 transparent PNG used as the open-tracking pixel
 const TRACKING_PIXEL = Buffer.from(
@@ -291,7 +296,10 @@ app.post('/api/process-one', async (req, res) => {
     const bodyIdx = withBody.findIndex(g => g.email === email);
     if (bodyIdx !== -1) { withBody[bodyIdx].body = body; await saveGuests(withBody); }
 
-    const html = textToHtml(body) + `<img src="${baseUrl}/api/track/${guest.id}.png" width="1" height="1" alt="" style="display:none">`;
+    const trackingPixel = openTrackingEnabled
+      ? `<img src="${baseUrl}/api/track/${guest.id}.png" width="1" height="1" alt="" style="display:none">`
+      : '';
+    const html = textToHtml(body) + trackingPixel;
     await sendMailWithRetry(transporter, {
       from: `"${config.fromName}" <${config.auth.user}>`,
       to: guest.email,
