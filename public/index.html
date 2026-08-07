@@ -305,6 +305,13 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
             </button>
             <div class="dropdown-menu" id="templateDropdownMenu"></div>
           </div>
+          <div class="dropdown" id="statusFilterDropdown">
+            <button type="button" class="dropdown-trigger" id="statusFilterDropdownBtn">
+              <span id="statusFilterDropdownLabel">All statuses</span>
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="dropdown-menu" id="statusFilterDropdownMenu"></div>
+          </div>
           <span style="flex:1"></span>
           <div class="search-wrap">
             <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
@@ -650,6 +657,45 @@ document.addEventListener('click', (e) => {
   if (!templateDropdown.contains(e.target)) templateDropdown.classList.remove('open');
 });
 
+// ---- guest list status filter (same custom-dropdown pattern as the template picker) ----
+let statusFilter = null; // null = all statuses
+const STATUS_FILTER_OPTIONS = [
+  { value: '', label: 'All statuses' },
+  { value: 'sent', label: 'Sent' },
+  { value: 'delivered', label: 'Delivered' },
+  { value: 'opened', label: 'Opened' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'pending', label: 'Pending' },
+];
+
+function renderStatusFilterDropdown() {
+  const menu = document.getElementById('statusFilterDropdownMenu');
+  menu.innerHTML = STATUS_FILTER_OPTIONS.map(o =>
+    `<div class="dropdown-item ${(statusFilter || '') === o.value ? 'selected' : ''}" data-status-filter-option="${o.value}">${o.label}</div>`
+  ).join('');
+  document.getElementById('statusFilterDropdownLabel').textContent =
+    STATUS_FILTER_OPTIONS.find(o => o.value === (statusFilter || ''))?.label || 'All statuses';
+}
+renderStatusFilterDropdown();
+
+const statusFilterDropdown = document.getElementById('statusFilterDropdown');
+document.getElementById('statusFilterDropdownBtn').onclick = (e) => {
+  e.stopPropagation();
+  statusFilterDropdown.classList.toggle('open');
+};
+document.getElementById('statusFilterDropdownMenu').addEventListener('click', (e) => {
+  const item = e.target.closest('[data-status-filter-option]');
+  if (!item) return;
+  statusFilter = item.dataset.statusFilterOption || null;
+  statusFilterDropdown.classList.remove('open');
+  renderStatusFilterDropdown();
+  currentPage = 1;
+  applyFilters();
+});
+document.addEventListener('click', (e) => {
+  if (!statusFilterDropdown.contains(e.target)) statusFilterDropdown.classList.remove('open');
+});
+
 document.getElementById('templateRows').addEventListener('click', async (e) => {
   const editId = e.target.dataset.editTemplate;
   const deleteId = e.target.dataset.deleteTemplate;
@@ -875,6 +921,7 @@ function applyFilters() {
 
   filteredGuests = guests.filter(g => {
     if (q && !(g.name.toLowerCase().includes(q) || g.email.toLowerCase().includes(q))) return false;
+    if (statusFilter && guestDeliveryState(g) !== statusFilter) return false;
     return true;
   });
 
