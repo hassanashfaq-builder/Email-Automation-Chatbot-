@@ -122,8 +122,24 @@
 
   /* ---- toolbar v2 ---- */
   .toolbar-v2 { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
-  .check-label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; user-select: none; }
-  .selected-count { color: var(--accent); font-size: 13px; font-weight: 500; }
+  .check-label { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 500; cursor: pointer; user-select: none; }
+  .selected-count { color: var(--accent); font-size: 13px; font-weight: 500; background: rgba(59,111,237,0.14); padding: 5px 10px; border-radius: 20px; }
+  input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+
+  /* ---- custom dropdown (replaces native <select> so the popup list can be themed) ---- */
+  .dropdown { position: relative; display: inline-block; }
+  .dropdown-trigger { background: #0d0f13; border: 1px solid var(--border); color: var(--text); padding: 9px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; min-width: 170px; max-width: 220px; }
+  .dropdown-trigger:hover { border-color: var(--accent); background: #14161c; }
+  .dropdown-trigger span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dropdown-trigger .chevron { flex-shrink: 0; color: var(--muted); transition: transform 0.15s; }
+  .dropdown.open .dropdown-trigger { border-color: var(--accent); }
+  .dropdown.open .chevron { transform: rotate(180deg); }
+  .dropdown-menu { display: none; position: absolute; top: 100%; left: 0; margin-top: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.45); z-index: 15; min-width: 100%; max-height: 260px; overflow-y: auto; padding: 6px; }
+  .dropdown.open .dropdown-menu { display: block; }
+  .dropdown-item { padding: 9px 10px; border-radius: 7px; font-size: 13px; cursor: pointer; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dropdown-item:hover { background: #23262e; }
+  .dropdown-item.selected { background: rgba(59,111,237,0.16); color: var(--accent); font-weight: 500; }
+  .dropdown-empty { padding: 10px; font-size: 12.5px; color: var(--muted); text-align: center; }
   .search-wrap { position: relative; display: inline-flex; align-items: center; }
   .search-wrap input, .search-wrap select { padding-left: 30px; min-width: 160px; }
   .search-wrap input { min-width: 200px; }
@@ -269,21 +285,17 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
           <button class="secondary" id="selectFailedBtn">Select failed</button>
           <button id="sendBtn" disabled>Send Invitations (0)</button>
           <button class="secondary danger" id="deleteBtn" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Delete</button>
-          <select id="templateSelect" class="btn-select" style="min-width:160px; max-width:220px; text-overflow:ellipsis"></select>
+          <div class="dropdown" id="templateDropdown">
+            <button type="button" class="dropdown-trigger" id="templateDropdownBtn">
+              <span id="templateDropdownLabel">No templates</span>
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="dropdown-menu" id="templateDropdownMenu"></div>
+          </div>
           <span style="flex:1"></span>
           <div class="search-wrap">
             <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
             <input type="text" id="searchInput" placeholder="Search guests...">
-          </div>
-          <div class="search-wrap" id="filterWrap">
-            <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></span>
-            <select id="statusFilter" style="padding-left:30px">
-              <option value="">All statuses</option>
-              <option value="delivered">Delivered</option>
-              <option value="opened">Opened</option>
-              <option value="failed">Failed</option>
-              <option value="pending">Pending</option>
-            </select>
           </div>
         </div>
 
@@ -379,6 +391,28 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
     <h3 id="modalName"></h3>
     <pre id="modalBody"></pre>
     <button class="secondary" id="closeModal">Close</button>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="editModalBackdrop">
+  <div class="modal">
+    <h3>Edit guest</h3>
+    <div class="field">
+      <label for="editNameInput">Name</label>
+      <input type="text" id="editNameInput">
+    </div>
+    <div class="field">
+      <label for="editEmailInput">Email</label>
+      <input type="text" id="editEmailInput">
+    </div>
+    <div class="field">
+      <label for="editBackgroundInput">Background</label>
+      <textarea id="editBackgroundInput" style="min-height:100px"></textarea>
+    </div>
+    <div class="row">
+      <button id="saveEditBtn">Save changes</button>
+      <button class="secondary" id="cancelEditBtn">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -491,12 +525,38 @@ function renderTemplateRows() {
   }).join('');
 }
 
+// ---- custom template dropdown (replaces native <select>) ----
+let selectedTemplateId = null;
+
 function renderTemplateSelect() {
-  const sel = document.getElementById('templateSelect');
-  const prev = sel.value;
-  sel.innerHTML = templates.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
-  if (templates.some(t => t.id === prev)) sel.value = prev;
+  if (!templates.some(t => t.id === selectedTemplateId)) {
+    selectedTemplateId = templates[0]?.id || null;
+  }
+
+  const menu = document.getElementById('templateDropdownMenu');
+  menu.innerHTML = templates.length
+    ? templates.map(t => `<div class="dropdown-item ${t.id === selectedTemplateId ? 'selected' : ''}" data-template-option="${t.id}">${escapeHtml(t.name)}</div>`).join('')
+    : '<div class="dropdown-empty">No templates yet</div>';
+
+  document.getElementById('templateDropdownLabel').textContent =
+    templates.find(t => t.id === selectedTemplateId)?.name || 'No templates';
 }
+
+const templateDropdown = document.getElementById('templateDropdown');
+document.getElementById('templateDropdownBtn').onclick = (e) => {
+  e.stopPropagation();
+  templateDropdown.classList.toggle('open');
+};
+document.getElementById('templateDropdownMenu').addEventListener('click', (e) => {
+  const item = e.target.closest('[data-template-option]');
+  if (!item) return;
+  selectedTemplateId = item.dataset.templateOption;
+  templateDropdown.classList.remove('open');
+  renderTemplateSelect();
+});
+document.addEventListener('click', (e) => {
+  if (!templateDropdown.contains(e.target)) templateDropdown.classList.remove('open');
+});
 
 document.getElementById('templateRows').addEventListener('click', async (e) => {
   const editId = e.target.dataset.editTemplate;
@@ -651,15 +711,9 @@ async function loadGuests() {
 
 function applyFilters() {
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
-  const statusFilter = document.getElementById('statusFilter').value;
 
   filteredGuests = guests.filter(g => {
     if (q && !(g.name.toLowerCase().includes(q) || g.email.toLowerCase().includes(q))) return false;
-    if (statusFilter) {
-      const status = g.sent ? (g.opened ? 'opened' : 'delivered') : (g.failed ? 'failed' : 'pending');
-      if (statusFilter === 'delivered' && !g.sent) return false;
-      if (statusFilter !== 'delivered' && statusFilter !== status) return false;
-    }
     return true;
   });
 
@@ -668,7 +722,6 @@ function applyFilters() {
   renderQuickStats();
 }
 document.getElementById('searchInput').addEventListener('input', () => { currentPage = 1; applyFilters(); });
-document.getElementById('statusFilter').addEventListener('change', () => { currentPage = 1; applyFilters(); });
 
 function statusInfo(g) {
   if (g.sent) return g.opened ? { cls: 'opened', label: 'Opened' } : { cls: 'delivered', label: 'Delivered' };
@@ -709,6 +762,7 @@ function render() {
         ${g.body ? `<button class="icon-btn" title="Preview" data-preview="${g.email}" style="width:30px;height:30px">${ICON_EYE}</button>` : ''}
         <button class="kebab-btn" data-kebab="${g.email}">${ICON_KEBAB}</button>
         <div class="kebab-menu" data-kebab-menu="${g.email}">
+          <button data-edit="${g.email}">Edit</button>
           <button class="danger" data-remove="${g.email}">Remove</button>
         </div>
       </td>
@@ -771,26 +825,68 @@ guestRows.addEventListener('change', (e) => {
   updateSendCount();
 });
 
+let editingGuestEmail = null;
+
 guestRows.addEventListener('click', async (e) => {
-  if (e.target.dataset.preview) {
-    const g = guests.find(x => x.email === e.target.dataset.preview);
+  // use closest() rather than e.target directly — clicking the icon glyph
+  // itself (an SVG child) makes e.target the svg/path, not the button that
+  // carries the data attribute, so a plain e.target.dataset check misses
+  // most clicks on the icon and only catches clicks on the button's padding.
+  const previewBtn = e.target.closest('[data-preview]');
+  const kebabBtn = e.target.closest('[data-kebab]');
+  const editBtn = e.target.closest('[data-edit]');
+  const removeBtn = e.target.closest('[data-remove]');
+
+  if (previewBtn) {
+    const g = guests.find(x => x.email === previewBtn.dataset.preview);
     document.getElementById('modalName').textContent = `To: ${g.name} <${g.email}>`;
     document.getElementById('modalBody').textContent = g.body;
     document.getElementById('modalBackdrop').style.display = 'flex';
   }
-  if (e.target.dataset.kebab) {
-    const menu = guestRows.querySelector(`[data-kebab-menu="${CSS.escape(e.target.dataset.kebab)}"]`);
+  if (kebabBtn) {
+    const menu = guestRows.querySelector(`[data-kebab-menu="${CSS.escape(kebabBtn.dataset.kebab)}"]`);
     const isOpen = menu.classList.contains('open');
     guestRows.querySelectorAll('.kebab-menu.open').forEach(m => m.classList.remove('open'));
     if (!isOpen) menu.classList.add('open');
   }
-  if (e.target.dataset.remove) {
+  if (editBtn) {
     guestRows.querySelectorAll('.kebab-menu.open').forEach(m => m.classList.remove('open'));
-    await fetch('/api/guests/' + encodeURIComponent(e.target.dataset.remove), { method: 'DELETE' });
-    checkedEmails.delete(e.target.dataset.remove);
+    const g = guests.find(x => x.email === editBtn.dataset.edit);
+    editingGuestEmail = g.email;
+    document.getElementById('editNameInput').value = g.name;
+    document.getElementById('editEmailInput').value = g.email;
+    document.getElementById('editBackgroundInput').value = g.background || '';
+    document.getElementById('editModalBackdrop').style.display = 'flex';
+  }
+  if (removeBtn) {
+    guestRows.querySelectorAll('.kebab-menu.open').forEach(m => m.classList.remove('open'));
+    await fetch('/api/guests/' + encodeURIComponent(removeBtn.dataset.remove), { method: 'DELETE' });
+    checkedEmails.delete(removeBtn.dataset.remove);
     loadGuests();
   }
 });
+
+document.getElementById('cancelEditBtn').onclick = () => { document.getElementById('editModalBackdrop').style.display = 'none'; };
+document.getElementById('saveEditBtn').onclick = async () => {
+  const name = document.getElementById('editNameInput').value.trim();
+  const email = document.getElementById('editEmailInput').value.trim();
+  const background = document.getElementById('editBackgroundInput').value.trim();
+  if (!email) { showToast('Email is required', true); return; }
+
+  const guest = guests.find(g => g.email === editingGuestEmail);
+  const res = await fetch('/api/guests/' + encodeURIComponent(guest.id), {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, email, background })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    showToast(err.error || 'Failed to save changes', true);
+    return;
+  }
+  document.getElementById('editModalBackdrop').style.display = 'none';
+  showToast('Guest updated');
+  loadGuests();
+};
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.actions-cell')) guestRows.querySelectorAll('.kebab-menu.open').forEach(m => m.classList.remove('open'));
 });
@@ -1013,7 +1109,7 @@ function parseCsv(text) {
 sendBtn.onclick = async () => {
   const emails = [...checkedEmails];
   if (!emails.length) return;
-  const templateId = document.getElementById('templateSelect').value;
+  const templateId = selectedTemplateId;
   if (!templateId) { showToast('Add a template first (Templates tab)', true); return; }
   const templateName = templates.find(t => t.id === templateId)?.name || 'the selected template';
   if (!confirm(`Send "${templateName}" to ${emails.length} guest(s)? This will actually send real emails.`)) return;

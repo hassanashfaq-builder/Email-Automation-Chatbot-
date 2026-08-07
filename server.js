@@ -135,6 +135,27 @@ app.post('/api/guests/import', async (req, res) => {
   res.json(merged);
 });
 
+// Edit a guest's name/email/background by id (rather than by email, since
+// email itself — the merge key used elsewhere — may be what's being changed).
+app.put('/api/guests/:id', async (req, res) => {
+  const { name, email, background } = req.body;
+  if (!email || !email.trim()) return res.status(400).json({ error: 'Email is required' });
+
+  const guests = await loadGuests();
+  const idx = guests.findIndex(g => g.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Guest not found' });
+
+  const newEmail = email.trim();
+  const collision = guests.find(g => g.id !== req.params.id && g.email.toLowerCase() === newEmail.toLowerCase());
+  if (collision) return res.status(400).json({ error: 'Another guest already has that email' });
+
+  guests[idx].email = newEmail;
+  guests[idx].name = (name || '').trim() || newEmail.split('@')[0];
+  guests[idx].background = (background || '').trim();
+  await saveGuests(guests);
+  res.json(guests[idx]);
+});
+
 app.delete('/api/guests/:email', async (req, res) => {
   const guests = (await loadGuests()).filter(g => g.email.toLowerCase() !== req.params.email.toLowerCase());
   await saveGuests(guests);
