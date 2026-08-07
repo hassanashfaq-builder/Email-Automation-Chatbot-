@@ -7,14 +7,44 @@
   :root {
     --bg: #0f1115; --card: #1a1d24; --border: #2a2e38; --text: #e8e9ec;
     --muted: #9199a8; --accent: #4f8cff; --accent-hover: #6fa1ff;
-    --green: #3ecf8e; --red: #ff6b6b; --yellow: #f5c04a;
+    --green: #3ecf8e; --red: #ff6b6b; --yellow: #f5c04a; --purple: #b183f5;
+    --sidebar-w: 220px; --sidebar-w-collapsed: 64px;
   }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
-  header { padding: 20px 32px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
-  header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
-  .container { max-width: 950px; margin: 0 auto; padding: 24px 32px; }
+  button { background: var(--accent); color: white; border: none; padding: 10px 18px; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 500; }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { background: #444; cursor: not-allowed; }
+  button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  button.secondary:hover { background: #23262e; }
+  button.secondary.danger { color: var(--red); border-color: rgba(255,107,107,0.4); }
+  button.secondary.danger:hover { background: rgba(255,107,107,0.1); }
+  button.icon-btn { background: transparent; border: 1px solid var(--border); color: var(--muted); width: 36px; height: 36px; padding: 0; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; }
+  button.icon-btn:hover { background: #23262e; color: var(--text); }
+
+  /* ---- topbar ---- */
+  .topbar { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .topbar-left { display: flex; align-items: center; gap: 12px; }
+  .app-icon { width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, var(--accent), #7b5cf5); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .topbar h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  .topbar p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+  .topbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pill { background: #0d0f13; border: 1px solid var(--border); border-radius: 20px; padding: 7px 14px; font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .guest-count { color: var(--muted); font-size: 13px; white-space: nowrap; }
+
+  /* ---- app shell ---- */
+  .app-shell { display: flex; align-items: flex-start; }
+  .sidebar { width: var(--sidebar-w); flex-shrink: 0; border-right: 1px solid var(--border); min-height: calc(100vh - 73px); padding: 16px 12px; display: flex; flex-direction: column; transition: width 0.15s; }
+  .sidebar.collapsed { width: var(--sidebar-w-collapsed); }
+  .sidebar.collapsed .navlabel, .sidebar.collapsed .collapse-label { display: none; }
+  .sidebar-nav { display: flex; flex-direction: column; gap: 2px; }
+  .navitem { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .navitem:hover { background: #1a1d24; }
+  .navitem.active { background: rgba(79,140,255,0.12); color: var(--accent); }
+  .navitem .icon { width: 18px; text-align: center; flex-shrink: 0; }
+  .sidebar-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--border); padding-top: 12px; }
+  .main-area { flex: 1; min-width: 0; padding: 24px 28px; }
+
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 20px; }
   .card h2 { font-size: 14px; margin: 0 0 12px; font-weight: 600; }
   .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -23,15 +53,8 @@
   textarea { width: 100%; min-height: 120px; background: #0d0f13; border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 10px; font-size: 13px; font-family: monospace; resize: vertical; }
   .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
   input[type=file] { color: var(--muted); font-size: 13px; }
-  button { background: var(--accent); color: white; border: none; padding: 10px 18px; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 500; }
-  button:hover { background: var(--accent-hover); }
-  button:disabled { background: #444; cursor: not-allowed; }
-  button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
-  button.secondary:hover { background: #23262e; }
-  button.secondary.danger { color: var(--red); border-color: rgba(255,107,107,0.4); }
-  button.secondary.danger:hover { background: rgba(255,107,107,0.1); }
   .row { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
-  .toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
   .count { color: var(--muted); font-size: 13px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--border); }
@@ -39,12 +62,6 @@
   tr:last-child td { border-bottom: none; }
   .name-cell { font-weight: 600; }
   .email-cell { color: var(--muted); }
-  .status { font-size: 11px; padding: 2px 8px; border-radius: 20px; display: inline-block; }
-  .status.sent { background: rgba(62,207,142,0.15); color: var(--green); }
-  .status.pending { background: rgba(145,153,168,0.15); color: var(--muted); }
-  .status.generating { background: rgba(245,192,74,0.15); color: var(--yellow); }
-  .status.sending { background: rgba(79,140,255,0.15); color: var(--accent); }
-  .status.error { background: rgba(255,107,107,0.15); color: var(--red); }
   .link-btn { background: none; border: none; color: var(--accent); text-decoration: underline; cursor: pointer; font-size: 12px; padding: 0; margin-right: 10px; }
   .link-btn.danger { color: var(--red); }
   .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color: var(--yellow); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 4px; }
@@ -56,151 +73,277 @@
   .toast { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--green); padding: 14px 18px; border-radius: 8px; font-size: 14px; min-width: 260px; box-shadow: 0 6px 20px rgba(0,0,0,0.4); animation: slideIn 0.25s ease; }
   .toast.error { border-left-color: var(--red); }
   @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-  nav.menubar { display: flex; gap: 4px; padding: 0 32px; border-bottom: 1px solid var(--border); }
-  nav.menubar .navitem { padding: 10px 16px; font-size: 13px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
-  nav.menubar .navitem.active { color: var(--text); border-bottom-color: var(--accent); }
-  .stat-cards { display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
-  .stat-card { flex: 1; min-width: 160px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; cursor: pointer; transition: border-color 0.15s; }
-  .stat-card:hover { border-color: var(--accent); }
-  .stat-card.active { border-color: var(--accent); background: #1c2130; }
-  .stat-card .num { font-size: 28px; font-weight: 700; }
-  .stat-card .label { color: var(--muted); font-size: 12px; margin-top: 4px; }
-  .stat-card.delivered .num { color: var(--green); }
-  .stat-card.opened .num { color: var(--accent); }
-  .stat-card.notdelivered .num { color: var(--red); }
   .empty-hint { color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }
   input[type=text], select { background: #0d0f13; border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 9px 10px; font-size: 13px; }
+  select.btn-select { color: var(--text); cursor: pointer; }
   .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
   .field label { font-size: 12px; color: var(--muted); font-weight: 500; }
   .var-tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px; margin: 2px 4px 2px 0; }
   .var-tag.recognized { background: rgba(62,207,142,0.15); color: var(--green); }
   .var-tag.unrecognized { background: rgba(245,192,74,0.15); color: var(--yellow); }
+
+  /* ---- stat cards v2 ---- */
+  .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .stat-card2 { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; cursor: pointer; transition: border-color 0.15s; }
+  .stat-card2:hover, .stat-card2.active { border-color: var(--accent); }
+  .stat-card2 .stat-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .stat-icon { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+  .stat-icon.delivered { background: rgba(62,207,142,0.15); color: var(--green); }
+  .stat-icon.opened { background: rgba(79,140,255,0.15); color: var(--accent); }
+  .stat-icon.replies { background: rgba(177,131,245,0.15); color: var(--purple); }
+  .stat-icon.failed { background: rgba(255,107,107,0.15); color: var(--red); }
+  .stat-card2 .stat-label { font-size: 13px; color: var(--muted); }
+  .stat-card2 .stat-num { font-size: 26px; font-weight: 700; }
+  .stat-card2 .stat-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  /* ---- two column ---- */
+  .two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+  .tips-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .tips-list li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
+  .tips-list .check { color: var(--green); flex-shrink: 0; }
+  .char-count { position: absolute; right: 10px; bottom: 10px; font-size: 11px; color: var(--muted); background: rgba(13,15,19,0.85); padding: 2px 6px; border-radius: 6px; }
+  .textarea-wrap { position: relative; }
+
+  /* ---- toolbar v2 ---- */
+  .toolbar-v2 { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .check-label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; user-select: none; }
+  .selected-count { color: var(--accent); font-size: 13px; font-weight: 500; }
+  .search-wrap { position: relative; }
+  .search-wrap input { padding-left: 30px; min-width: 200px; }
+  .search-wrap .icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 12px; pointer-events: none; }
+
+  /* ---- status dot ---- */
+  .status-dot { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+  .status-dot .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .status-dot.delivered .dot { background: var(--green); } .status-dot.delivered { color: var(--green); }
+  .status-dot.opened .dot { background: var(--accent); } .status-dot.opened { color: var(--accent); }
+  .status-dot.failed .dot { background: var(--red); } .status-dot.failed { color: var(--red); }
+  .status-dot.pending .dot { background: var(--muted); } .status-dot.pending { color: var(--muted); }
+  .status-dot.working .dot { background: var(--yellow); } .status-dot.working { color: var(--yellow); }
+
+  /* ---- kebab menu ---- */
+  .actions-cell { position: relative; display: flex; align-items: center; gap: 8px; }
+  .kebab-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 4px 8px; border-radius: 6px; }
+  .kebab-btn:hover { background: #23262e; color: var(--text); }
+  .kebab-menu { display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.4); z-index: 5; min-width: 130px; overflow: hidden; }
+  .kebab-menu.open { display: block; }
+  .kebab-menu button { display: block; width: 100%; text-align: left; background: none; border: none; color: var(--text); padding: 9px 12px; font-size: 13px; border-radius: 0; }
+  .kebab-menu button:hover { background: #23262e; }
+  .kebab-menu button.danger { color: var(--red); }
+
+  /* ---- pagination ---- */
+  .pagination { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; flex-wrap: wrap; gap: 10px; }
+  .page-btns { display: flex; align-items: center; gap: 4px; }
+  .page-btns button { min-width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .page-btns button.page-num.active { background: var(--accent); }
 </style>
 </head>
 <body>
 
-<header>
-  <div>
-    <h1>Kianistan Podcast — Invitation Mailer</h1>
-    <p>Sending from hassan@kianistan.com</p>
-  </div>
-  <span class="count" id="countLabel">0 guests</span>
-</header>
-
-<nav class="menubar">
-  <div class="navitem active" data-view="guests">Guests</div>
-  <div class="navitem" data-view="templates">Templates</div>
-  <div class="navitem" data-view="stats">Email Stats</div>
-</nav>
-
-<div class="container" id="guestsView">
-
-  <div class="card">
-    <h2>Add guests</h2>
-    <div class="tabs">
-      <div class="tab active" data-tab="paste">Paste text</div>
-      <div class="tab" data-tab="upload">Upload CSV</div>
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="app-icon">🎙️</div>
+    <div>
+      <h1>Kianistan Podcast — Invitation Mailer</h1>
+      <p>Send personalized invitations to podcast guests</p>
     </div>
+  </div>
+  <div class="topbar-right">
+    <span class="pill" id="fromEmailPill">📧 Sending from —</span>
+    <span class="guest-count" id="countLabel">0 Guests</span>
+    <button class="icon-btn" id="refreshBtn" title="Refresh">⟳</button>
+    <button class="icon-btn" id="bellBtn" title="Notifications">🔔</button>
+    <button id="syncBtn">⟳ Sync</button>
+    <button id="newTemplateBtn">+ New Template</button>
+  </div>
+</div>
 
-    <div id="pasteTab">
-      <textarea id="pasteArea" placeholder="Paste directly from a spreadsheet (tab-separated), or use Name | Email | Background:
+<div class="app-shell">
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-nav">
+      <div class="navitem active" data-view="guests"><span class="icon">👥</span><span class="navlabel">Guests</span></div>
+      <div class="navitem" data-view="templates"><span class="icon">📄</span><span class="navlabel">Templates</span></div>
+      <div class="navitem" data-view="analytics"><span class="icon">📊</span><span class="navlabel">Analytics</span></div>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="navitem" id="settingsNav"><span class="icon">⚙️</span><span class="navlabel">Settings</span></div>
+      <div class="navitem" id="helpNav"><span class="icon">❓</span><span class="navlabel">Help</span></div>
+      <div class="navitem" id="collapseBtn"><span class="icon">‹</span><span class="navlabel collapse-label">Collapse</span></div>
+    </div>
+  </div>
+
+  <div class="main-area">
+
+    <div id="guestsView">
+
+      <div class="stat-cards">
+        <div class="stat-card2" data-stat="delivered">
+          <div class="stat-top"><div class="stat-icon delivered">✈️</div><div class="stat-label">Delivered</div></div>
+          <div class="stat-num" id="qDeliveredNum">0</div>
+          <div class="stat-sub" id="qDeliveredSub">0% of guests</div>
+        </div>
+        <div class="stat-card2" data-stat="opened">
+          <div class="stat-top"><div class="stat-icon opened">✉️</div><div class="stat-label">Opened</div></div>
+          <div class="stat-num" id="qOpenedNum">0</div>
+          <div class="stat-sub" id="qOpenedSub">0% open rate</div>
+        </div>
+        <div class="stat-card2" data-stat="replies">
+          <div class="stat-top"><div class="stat-icon replies">↩️</div><div class="stat-label">Replies</div></div>
+          <div class="stat-num" id="qRepliesNum">0</div>
+          <div class="stat-sub">Not tracked yet</div>
+        </div>
+        <div class="stat-card2" data-stat="notDelivered">
+          <div class="stat-top"><div class="stat-icon failed">⛔</div><div class="stat-label">Failed</div></div>
+          <div class="stat-num" id="qFailedNum">0</div>
+          <div class="stat-sub" id="qFailedSub">0% of guests</div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="card" style="margin-bottom:0">
+          <h2>Add Guests</h2>
+          <div class="tabs">
+            <div class="tab active" data-tab="paste">Paste Text</div>
+            <div class="tab" data-tab="upload">Upload CSV</div>
+          </div>
+
+          <div id="pasteTab">
+            <div class="textarea-wrap">
+              <textarea id="pasteArea" placeholder="Paste guests directly from a spreadsheet (tab-separated), or use Name | Email | Background:
 Alfred de Zayas | alfred@example.com | UN Independent Expert, former OHCHR senior lawyer, critic of unilateral sanctions
 Jane Smith | jane@example.com | Professor of international law at Oxford, author of three books on sanctions law"></textarea>
-      <div class="hint">Column order doesn't matter — the email is auto-detected wherever it appears in each row. Works with spreadsheet copy-paste (tabs) or the Name | Email | Background format.</div>
-      <div class="row"><button id="importPasteBtn">Add to list</button></div>
+              <span class="char-count" id="pastePreviewCount">0 guests</span>
+            </div>
+            <div class="hint">Column order doesn't matter — the email is auto-detected wherever it appears in each row.<br>Works with spreadsheet copy-paste (tabs) or the Name | Email | Background format.</div>
+            <div class="row"><button id="importPasteBtn">Add to list</button></div>
+          </div>
+
+          <div id="uploadTab" style="display:none">
+            <input type="file" id="csvFile" accept=".csv">
+            <div class="hint">CSV columns: name, email, background, topic (header row optional, name/topic optional)</div>
+            <div class="row"><button id="importCsvBtn">Add to list</button></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:0">
+          <h2>Quick Tips</h2>
+          <ul class="tips-list">
+            <li><span class="check">✓</span> Email auto-detected</li>
+            <li><span class="check">✓</span> Name is optional</li>
+            <li><span class="check">✓</span> Background is optional</li>
+            <li><span class="check">✓</span> Supports spreadsheet paste</li>
+            <li><span class="check">✓</span> Duplicate emails are skipped</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar-v2">
+          <label class="check-label"><input type="checkbox" id="selectAllCb"> Select all</label>
+          <span class="selected-count" id="selectedCountLabel" style="display:none"></span>
+          <button class="secondary" id="selectFailedBtn">Select failed</button>
+          <button id="sendBtn" disabled>Send Invitations (0)</button>
+          <button class="secondary danger" id="deleteBtn" disabled>🗑 Delete</button>
+          <select id="templateSelect" class="btn-select" style="min-width:200px"></select>
+          <span style="flex:1"></span>
+          <div class="search-wrap">
+            <span class="icon">🔍</span>
+            <input type="text" id="searchInput" placeholder="Search guests...">
+          </div>
+          <select id="statusFilter">
+            <option value="">All statuses</option>
+            <option value="delivered">Delivered</option>
+            <option value="opened">Opened</option>
+            <option value="failed">Failed</option>
+            <option value="pending">Pending</option>
+          </select>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width:30px"></th><th>Name</th><th>Email</th><th>Status</th>
+              <th>Template</th><th>Sent At</th><th style="text-align:right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="guestRows"></tbody>
+        </table>
+        <div class="empty-hint" id="guestsEmptyHint" style="display:none">No guests match your search/filter</div>
+
+        <div class="pagination">
+          <span class="count" id="paginationLabel"></span>
+          <div class="page-btns" id="pageBtns"></div>
+        </div>
+      </div>
+
     </div>
 
-    <div id="uploadTab" style="display:none">
-      <input type="file" id="csvFile" accept=".csv">
-      <div class="hint">CSV columns: name, email, background, topic (header row optional, topic optional)</div>
-      <div class="row"><button id="importCsvBtn">Add to list</button></div>
-    </div>
-  </div>
+    <div id="templatesView" style="display:none">
+      <div class="card">
+        <h2 id="templateFormTitle">Add template</h2>
+        <div class="field">
+          <label for="templateNameInput">Template name</label>
+          <input type="text" id="templateNameInput" placeholder="e.g. Guest Invitation Email">
+        </div>
+        <div class="field">
+          <label for="templateSubjectInput">Subject</label>
+          <input type="text" id="templateSubjectInput" placeholder="e.g. Invitation to Join Kianistan Podcast">
+        </div>
+        <div class="field">
+          <label for="templateBodyInput">Email body</label>
+          <textarea id="templateBodyInput" style="min-height:220px" placeholder="Use [Full Name], [Background], [Topic], or [Email] anywhere you want guest data inserted."></textarea>
+        </div>
+        <div id="templateVarsPreview" class="hint"></div>
+        <div class="row">
+          <button id="saveTemplateBtn">Save template</button>
+          <button class="secondary" id="cancelEditTemplateBtn" style="display:none">Cancel edit</button>
+        </div>
+      </div>
 
-  <div class="card">
-    <div class="toolbar">
-      <button class="secondary" id="selectAllBtn">Select all</button>
-      <button class="secondary" id="selectNoneBtn">Select none</button>
-      <button class="secondary" id="selectFailedBtn">Select failed</button>
-      <button class="secondary danger" id="deleteSelectedBtn">Delete selected</button>
-      <button class="secondary danger" id="deleteAllBtn">Delete all</button>
-      <span style="flex:1"></span>
-      <select id="templateSelect" style="min-width:220px"></select>
-      <button id="sendBtn">Send (0)</button>
+      <div class="card">
+        <h2>Your templates</h2>
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Subject</th><th>Variables</th><th></th></tr>
+          </thead>
+          <tbody id="templateRows"></tbody>
+        </table>
+      </div>
     </div>
 
-    <table>
-      <thead>
-        <tr><th style="width:30px"></th><th>Name</th><th>Email</th><th>Status</th><th></th></tr>
-      </thead>
-      <tbody id="guestRows"></tbody>
-    </table>
-  </div>
+    <div id="analyticsView" style="display:none">
+      <div class="row" style="justify-content:flex-end; margin-top:0; margin-bottom:14px">
+        <span class="count" id="statLastSynced"></span>
+        <button class="secondary" id="syncStatsBtn">Sync now</button>
+      </div>
+      <div class="stat-cards">
+        <div class="stat-card2" data-astat="delivered">
+          <div class="stat-top"><div class="stat-icon delivered">✈️</div><div class="stat-label">Delivered</div></div>
+          <div class="stat-num" id="statDeliveredNum">0</div>
+        </div>
+        <div class="stat-card2" data-astat="opened">
+          <div class="stat-top"><div class="stat-icon opened">✉️</div><div class="stat-label">Opened</div></div>
+          <div class="stat-num" id="statOpenedNum">0</div>
+        </div>
+        <div class="stat-card2" data-astat="notDelivered">
+          <div class="stat-top"><div class="stat-icon failed">⛔</div><div class="stat-label">Not delivered (failed)</div></div>
+          <div class="stat-num" id="statNotDeliveredNum">0</div>
+        </div>
+      </div>
 
-</div>
+      <div class="card">
+        <h2 id="statSectionTitle">Delivered</h2>
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Email</th><th id="statExtraCol">Sent at</th></tr>
+          </thead>
+          <tbody id="statRows"></tbody>
+        </table>
+        <div class="empty-hint" id="statEmptyHint" style="display:none">Nothing here yet</div>
+      </div>
+    </div>
 
-<div class="container" id="templatesView" style="display:none">
-  <div class="card">
-    <h2 id="templateFormTitle">Add template</h2>
-    <div class="field">
-      <label for="templateNameInput">Template name</label>
-      <input type="text" id="templateNameInput" placeholder="e.g. Guest Invitation Email">
-    </div>
-    <div class="field">
-      <label for="templateSubjectInput">Subject</label>
-      <input type="text" id="templateSubjectInput" placeholder="e.g. Invitation to Join Kianistan Podcast">
-    </div>
-    <div class="field">
-      <label for="templateBodyInput">Email body</label>
-      <textarea id="templateBodyInput" style="min-height:220px" placeholder="Use [Full Name], [Background], [Topic], or [Email] anywhere you want guest data inserted."></textarea>
-    </div>
-    <div id="templateVarsPreview" class="hint"></div>
-    <div class="row">
-      <button id="saveTemplateBtn">Save template</button>
-      <button class="secondary" id="cancelEditTemplateBtn" style="display:none">Cancel edit</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Your templates</h2>
-    <table>
-      <thead>
-        <tr><th>Name</th><th>Subject</th><th>Variables</th><th></th></tr>
-      </thead>
-      <tbody id="templateRows"></tbody>
-    </table>
-  </div>
-</div>
-
-<div class="container" id="statsView" style="display:none">
-  <div class="row" style="justify-content:flex-end; margin-top:0; margin-bottom:14px">
-    <span class="count" id="statLastSynced"></span>
-    <button class="secondary" id="syncStatsBtn">Sync now</button>
-  </div>
-  <div class="stat-cards">
-    <div class="stat-card delivered" data-stat="delivered">
-      <div class="num" id="statDeliveredNum">0</div>
-      <div class="label">Delivered</div>
-    </div>
-    <div class="stat-card opened" data-stat="opened">
-      <div class="num" id="statOpenedNum">0</div>
-      <div class="label">Opened</div>
-    </div>
-    <div class="stat-card notdelivered" data-stat="notDelivered">
-      <div class="num" id="statNotDeliveredNum">0</div>
-      <div class="label">Not delivered (failed)</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2 id="statSectionTitle">Delivered</h2>
-    <table>
-      <thead>
-        <tr><th>Name</th><th>Email</th><th id="statExtraCol">Sent at</th></tr>
-      </thead>
-      <tbody id="statRows"></tbody>
-    </table>
-    <div class="empty-hint" id="statEmptyHint" style="display:none">Nothing here yet</div>
   </div>
 </div>
 
@@ -216,20 +359,53 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
 
 <script>
 let guests = [];
+let filteredGuests = [];
+let currentPage = 1;
+const PAGE_SIZE = 10;
 const guestRows = document.getElementById('guestRows');
 const countLabel = document.getElementById('countLabel');
 const sendBtn = document.getElementById('sendBtn');
+const deleteBtn = document.getElementById('deleteBtn');
+const checkedEmails = new Set(); // survives across pagination/re-render
+const seenEmails = new Set(); // tracks which guests we've auto-checked once already
 
 // ---- top-level nav ----
-document.querySelectorAll('nav.menubar .navitem').forEach(item => item.onclick = () => {
-  document.querySelectorAll('nav.menubar .navitem').forEach(x => x.classList.remove('active'));
-  item.classList.add('active');
-  document.getElementById('guestsView').style.display = item.dataset.view === 'guests' ? 'block' : 'none';
-  document.getElementById('templatesView').style.display = item.dataset.view === 'templates' ? 'block' : 'none';
-  document.getElementById('statsView').style.display = item.dataset.view === 'stats' ? 'block' : 'none';
-  if (item.dataset.view === 'stats') loadStats();
-  if (item.dataset.view === 'templates') loadTemplates();
-});
+function setActiveNav(view) {
+  document.querySelectorAll('.sidebar-nav .navitem').forEach(x => x.classList.toggle('active', x.dataset.view === view));
+  document.getElementById('guestsView').style.display = view === 'guests' ? 'block' : 'none';
+  document.getElementById('templatesView').style.display = view === 'templates' ? 'block' : 'none';
+  document.getElementById('analyticsView').style.display = view === 'analytics' ? 'block' : 'none';
+  if (view === 'analytics') loadStats();
+  if (view === 'templates') loadTemplates();
+}
+document.querySelectorAll('.sidebar-nav .navitem').forEach(item => item.onclick = () => setActiveNav(item.dataset.view));
+
+document.getElementById('settingsNav').onclick = () => showToast('Settings — coming soon');
+document.getElementById('helpNav').onclick = () => showToast('Help — coming soon');
+document.getElementById('collapseBtn').onclick = () => document.getElementById('sidebar').classList.toggle('collapsed');
+
+document.getElementById('newTemplateBtn').onclick = () => {
+  setActiveNav('templates');
+  resetTemplateForm();
+  document.getElementById('templateNameInput').focus();
+};
+
+document.getElementById('refreshBtn').onclick = () => { loadGuests(); showToast('Refreshed'); };
+document.getElementById('bellBtn').onclick = () => showToast('No new notifications');
+
+document.getElementById('syncBtn').onclick = async () => {
+  const btn = document.getElementById('syncBtn');
+  btn.disabled = true;
+  await loadGuests();
+  btn.disabled = false;
+  showToast('Synced');
+};
+
+async function loadConfig() {
+  const res = await fetch('/api/config');
+  const cfg = await res.json();
+  document.getElementById('fromEmailPill').textContent = '📧 Sending from ' + (cfg.fromEmail || 'unknown');
+}
 
 // ---- templates ----
 let templates = [];
@@ -339,8 +515,8 @@ document.getElementById('saveTemplateBtn').onclick = async () => {
 };
 
 renderVarsPreview();
-loadTemplates();
 
+// ---- analytics (formerly "Email Stats") ----
 let statsData = null;
 let activeStat = 'delivered';
 
@@ -361,7 +537,7 @@ const STAT_META = {
 };
 
 function renderStatSection() {
-  document.querySelectorAll('.stat-card').forEach(c => c.classList.toggle('active', c.dataset.stat === activeStat));
+  document.querySelectorAll('#analyticsView .stat-card2').forEach(c => c.classList.toggle('active', c.dataset.astat === activeStat));
   const meta = STAT_META[activeStat];
   document.getElementById('statSectionTitle').textContent = meta.title;
   document.getElementById('statExtraCol').textContent = meta.col;
@@ -385,8 +561,8 @@ function formatStatExtra(g, field) {
   return new Date(val).toLocaleString() + extra;
 }
 
-document.querySelectorAll('.stat-card').forEach(card => card.onclick = () => {
-  activeStat = card.dataset.stat;
+document.querySelectorAll('#analyticsView .stat-card2').forEach(card => card.onclick = () => {
+  activeStat = card.dataset.astat;
   renderStatSection();
 });
 
@@ -399,7 +575,23 @@ document.getElementById('syncStatsBtn').onclick = async () => {
   btn.disabled = false;
 };
 
-// ---- tabs ----
+// quick stat cards on the Guests page (derived from the already-loaded guest list)
+function renderQuickStats() {
+  const total = guests.length;
+  const delivered = guests.filter(g => g.sent).length;
+  const opened = guests.filter(g => g.opened).length;
+  const failed = guests.filter(g => g.failed && !g.sent).length;
+  const pct = (n, d) => d ? Math.round((n / d) * 100) : 0;
+
+  document.getElementById('qDeliveredNum').textContent = delivered;
+  document.getElementById('qDeliveredSub').textContent = `${pct(delivered, total)}% of guests`;
+  document.getElementById('qOpenedNum').textContent = opened;
+  document.getElementById('qOpenedSub').textContent = `${pct(opened, delivered)}% open rate`;
+  document.getElementById('qFailedNum').textContent = failed;
+  document.getElementById('qFailedSub').textContent = `${pct(failed, total)}% of guests`;
+}
+
+// ---- tabs (Add Guests: paste / CSV) ----
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
   t.classList.add('active');
@@ -411,43 +603,140 @@ document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
 async function loadGuests() {
   const res = await fetch('/api/guests');
   guests = await res.json();
+  // default newly-seen, not-yet-sent guests to checked (once) so a fresh
+  // list can be sent immediately without manually selecting everything —
+  // but never re-check something the user deliberately unchecked before.
+  guests.forEach(g => {
+    if (!seenEmails.has(g.email)) {
+      seenEmails.add(g.email);
+      if (!g.sent) checkedEmails.add(g.email);
+    }
+    if (g.sent) checkedEmails.delete(g.email);
+  });
+  applyFilters();
+}
+
+function applyFilters() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const statusFilter = document.getElementById('statusFilter').value;
+
+  filteredGuests = guests.filter(g => {
+    if (q && !(g.name.toLowerCase().includes(q) || g.email.toLowerCase().includes(q))) return false;
+    if (statusFilter) {
+      const status = g.sent ? (g.opened ? 'opened' : 'delivered') : (g.failed ? 'failed' : 'pending');
+      if (statusFilter === 'delivered' && !g.sent) return false;
+      if (statusFilter !== 'delivered' && statusFilter !== status) return false;
+    }
+    return true;
+  });
+
+  currentPage = Math.min(currentPage, Math.max(1, Math.ceil(filteredGuests.length / PAGE_SIZE)));
   render();
+  renderQuickStats();
+}
+document.getElementById('searchInput').addEventListener('input', () => { currentPage = 1; applyFilters(); });
+document.getElementById('statusFilter').addEventListener('change', () => { currentPage = 1; applyFilters(); });
+
+function statusInfo(g) {
+  if (g.sent) return g.opened ? { cls: 'opened', label: 'Opened' } : { cls: 'delivered', label: 'Delivered' };
+  if (g.failed) return { cls: 'failed', label: 'Failed' };
+  return { cls: 'pending', label: 'Pending' };
+}
+
+function relativeTime(iso) {
+  if (!iso) return '—';
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
 }
 
 function render() {
-  countLabel.textContent = `${guests.length} guests`;
+  countLabel.textContent = `${guests.length} Guests`;
+  const totalPages = Math.max(1, Math.ceil(filteredGuests.length / PAGE_SIZE));
+  const pageItems = filteredGuests.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   guestRows.innerHTML = '';
-  guests.forEach((g) => {
+  pageItems.forEach((g) => {
     const tr = document.createElement('tr');
-    const statusHtml = g.sent
-      ? `<span class="status sent">✓ Sent${g.opened ? ' · Opened' : ''}</span>`
-      : g.failed
-        ? `<span class="status error" id="status-${cssId(g.email)}">Failed</span>`
-        : `<span class="status pending" id="status-${cssId(g.email)}">Pending</span>`;
+    const st = statusInfo(g);
     tr.innerHTML = `
-      <td><input type="checkbox" data-email="${g.email}" ${g.sent ? '' : 'checked'}></td>
+      <td><input type="checkbox" data-email="${g.email}" ${checkedEmails.has(g.email) ? 'checked' : ''}></td>
       <td class="name-cell">${escapeHtml(g.name)}</td>
       <td class="email-cell">${escapeHtml(g.email)}</td>
-      <td>${statusHtml}</td>
-      <td>
-        ${g.body ? `<button class="link-btn" data-preview="${g.email}">Preview</button>` : ''}
-        <button class="link-btn danger" data-remove="${g.email}">Remove</button>
+      <td><span class="status-dot ${st.cls}" id="status-${cssId(g.email)}"><span class="dot"></span>${st.label}</span></td>
+      <td>${escapeHtml(g.templateName || '—')}</td>
+      <td>${relativeTime(g.sentAt)}</td>
+      <td class="actions-cell" style="justify-content:flex-end">
+        ${g.body ? `<button class="icon-btn" title="Preview" data-preview="${g.email}" style="width:30px;height:30px">👁</button>` : ''}
+        <button class="kebab-btn" data-kebab="${g.email}">⋮</button>
+        <div class="kebab-menu" data-kebab-menu="${g.email}">
+          <button class="danger" data-remove="${g.email}">Remove</button>
+        </div>
       </td>
     `;
     guestRows.appendChild(tr);
   });
+  guestsEmptyHintUpdate(pageItems.length);
+  renderPagination(totalPages);
   updateSendCount();
 }
+
+function guestsEmptyHintUpdate(shownCount) {
+  document.getElementById('guestsEmptyHint').style.display = (guests.length && !shownCount) ? 'block' : 'none';
+}
+
+function renderPagination(totalPages) {
+  const start = filteredGuests.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
+  const end = Math.min(currentPage * PAGE_SIZE, filteredGuests.length);
+  document.getElementById('paginationLabel').textContent = `Showing ${start} to ${end} of ${filteredGuests.length} guests`;
+
+  const btns = document.getElementById('pageBtns');
+  let html = `<button class="secondary" ${currentPage === 1 ? 'disabled' : ''} data-page="prev">‹</button>`;
+  for (let p = 1; p <= totalPages; p++) {
+    html += `<button class="secondary page-num ${p === currentPage ? 'active' : ''}" data-page="${p}">${p}</button>`;
+  }
+  html += `<button class="secondary" ${currentPage === totalPages ? 'disabled' : ''} data-page="next">›</button>`;
+  btns.innerHTML = html;
+}
+
+document.getElementById('pageBtns').addEventListener('click', (e) => {
+  const p = e.target.dataset.page;
+  if (!p) return;
+  const totalPages = Math.max(1, Math.ceil(filteredGuests.length / PAGE_SIZE));
+  if (p === 'prev') currentPage = Math.max(1, currentPage - 1);
+  else if (p === 'next') currentPage = Math.min(totalPages, currentPage + 1);
+  else currentPage = parseInt(p, 10);
+  render();
+});
 
 function cssId(email) { return email.replace(/[^a-z0-9]/gi, '_'); }
 function escapeHtml(s) { return (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
 function updateSendCount() {
-  const checked = guestRows.querySelectorAll('input[type=checkbox]:checked').length;
-  sendBtn.textContent = `Send (${checked})`;
+  const checked = checkedEmails.size;
+  sendBtn.textContent = `Send Invitations (${checked})`;
   sendBtn.disabled = checked === 0;
+  deleteBtn.disabled = checked === 0;
+  const label = document.getElementById('selectedCountLabel');
+  if (checked) { label.style.display = 'inline'; label.textContent = `${checked} selected`; }
+  else { label.style.display = 'none'; }
+  const allOnPageChecked = guestRows.querySelectorAll('input[type=checkbox]').length > 0 &&
+    [...guestRows.querySelectorAll('input[type=checkbox]')].every(cb => cb.checked);
+  document.getElementById('selectAllCb').checked = allOnPageChecked;
 }
-guestRows.addEventListener('change', (e) => { if (e.target.type === 'checkbox') updateSendCount(); });
+
+guestRows.addEventListener('change', (e) => {
+  if (e.target.type !== 'checkbox') return;
+  const email = e.target.dataset.email;
+  if (e.target.checked) checkedEmails.add(email); else checkedEmails.delete(email);
+  updateSendCount();
+});
 
 guestRows.addEventListener('click', async (e) => {
   if (e.target.dataset.preview) {
@@ -456,41 +745,52 @@ guestRows.addEventListener('click', async (e) => {
     document.getElementById('modalBody').textContent = g.body;
     document.getElementById('modalBackdrop').style.display = 'flex';
   }
+  if (e.target.dataset.kebab) {
+    const menu = guestRows.querySelector(`[data-kebab-menu="${CSS.escape(e.target.dataset.kebab)}"]`);
+    const isOpen = menu.classList.contains('open');
+    guestRows.querySelectorAll('.kebab-menu.open').forEach(m => m.classList.remove('open'));
+    if (!isOpen) menu.classList.add('open');
+  }
   if (e.target.dataset.remove) {
+    guestRows.querySelectorAll('.kebab-menu.open').forEach(m => m.classList.remove('open'));
     await fetch('/api/guests/' + encodeURIComponent(e.target.dataset.remove), { method: 'DELETE' });
+    checkedEmails.delete(e.target.dataset.remove);
     loadGuests();
   }
 });
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.actions-cell')) guestRows.querySelectorAll('.kebab-menu.open').forEach(m => m.classList.remove('open'));
+});
 document.getElementById('closeModal').onclick = () => document.getElementById('modalBackdrop').style.display = 'none';
 
-document.getElementById('selectAllBtn').onclick = () => { guestRows.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = true); updateSendCount(); };
-document.getElementById('selectNoneBtn').onclick = () => { guestRows.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false); updateSendCount(); };
-document.getElementById('selectFailedBtn').onclick = () => {
-  const failedEmails = new Set(guests.filter(g => g.failed && !g.sent).map(g => g.email));
-  guestRows.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = failedEmails.has(cb.dataset.email));
+document.getElementById('selectAllCb').addEventListener('change', (e) => {
+  guestRows.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    cb.checked = e.target.checked;
+    if (e.target.checked) checkedEmails.add(cb.dataset.email); else checkedEmails.delete(cb.dataset.email);
+  });
   updateSendCount();
+});
+
+document.getElementById('selectFailedBtn').onclick = () => {
+  checkedEmails.clear();
+  guests.filter(g => g.failed && !g.sent).forEach(g => checkedEmails.add(g.email));
+  render();
 };
 
-document.getElementById('deleteSelectedBtn').onclick = async () => {
-  const emails = [...guestRows.querySelectorAll('input[type=checkbox]:checked')].map(cb => cb.dataset.email);
-  if (!emails.length) { showToast('No guests selected', true); return; }
-  if (!confirm(`Delete ${emails.length} selected guest(s)? This cannot be undone.`)) return;
+deleteBtn.onclick = async () => {
+  const emails = [...checkedEmails];
+  if (!emails.length) return;
+  const allSelected = emails.length === guests.length;
+  const msg = allSelected
+    ? `Delete ALL ${emails.length} guest(s) from the list? This cannot be undone.`
+    : `Delete ${emails.length} selected guest(s)? This cannot be undone.`;
+  if (!confirm(msg)) return;
   await fetch('/api/guests/delete-bulk', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ emails })
+    body: JSON.stringify(allSelected ? { all: true } : { emails })
   });
   showToast(`Deleted ${emails.length} guest(s)`);
-  loadGuests();
-};
-
-document.getElementById('deleteAllBtn').onclick = async () => {
-  if (!guests.length) { showToast('Guest list is already empty', true); return; }
-  if (!confirm(`Delete ALL ${guests.length} guest(s) from the list? This cannot be undone.`)) return;
-  await fetch('/api/guests/delete-bulk', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ all: true })
-  });
-  showToast('All guests deleted');
+  checkedEmails.clear();
   loadGuests();
 };
 
@@ -540,13 +840,20 @@ function parsePastedGuests(raw) {
     background = background.replace(/[\t|]+/g, ' ').replace(/[\s,;]{2,}/g, ' ').trim().replace(/^[,;\s]+|[,;\s]+$/g, '');
     return { name: r.name, email, background, topic: '' };
   }).filter(g => {
-    const ok = g.name && g.email;
-    if (!ok) skipped.push(g.name || g.email || '(empty row)');
+    const ok = g.email; // name is optional — falls back to the email's local part server-side
+    if (!ok) skipped.push(g.name || '(empty row)');
     return ok;
   });
 
   return { parsed, skipped };
 }
+
+function updatePastePreviewCount() {
+  const raw = document.getElementById('pasteArea').value.trim();
+  const count = raw ? parsePastedGuests(raw).parsed.length : 0;
+  document.getElementById('pastePreviewCount').textContent = `${count} guest${count === 1 ? '' : 's'}`;
+}
+document.getElementById('pasteArea').addEventListener('input', updatePastePreviewCount);
 
 document.getElementById('importPasteBtn').onclick = async () => {
   const raw = document.getElementById('pasteArea').value.trim();
@@ -560,6 +867,7 @@ document.getElementById('importPasteBtn').onclick = async () => {
     body: JSON.stringify({ guests: parsed })
   });
   document.getElementById('pasteArea').value = '';
+  updatePastePreviewCount();
   showToast(`Added ${parsed.length} guest(s)` + (skipped.length ? ` — skipped ${skipped.length} row(s) with no detectable email` : ''), skipped.length > 0);
   loadGuests();
 };
@@ -584,7 +892,7 @@ document.getElementById('importCsvBtn').onclick = async () => {
   const parsed = dataRows.map(r => ({
     name: r[nameIdx] || '', email: r[emailIdx] || '',
     background: bgIdx > -1 ? (r[bgIdx] || '') : '', topic: topicIdx > -1 ? (r[topicIdx] || '') : ''
-  })).filter(g => g.name && g.email);
+  })).filter(g => g.email);
 
   if (!parsed.length) { showToast('No valid rows found in CSV', true); return; }
 
@@ -619,11 +927,11 @@ function parseCsv(text) {
   return rows.filter(r => r.some(f => f.trim() !== ''));
 }
 
-// ---- generate & send ----
+// ---- send invitations ----
 // One request per guest (rather than one long streamed batch) so each call
 // finishes quickly on its own — the client drives the pacing between guests.
 sendBtn.onclick = async () => {
-  const emails = [...guestRows.querySelectorAll('input[type=checkbox]:checked')].map(cb => cb.dataset.email);
+  const emails = [...checkedEmails];
   if (!emails.length) return;
   const templateId = document.getElementById('templateSelect').value;
   if (!templateId) { showToast('Add a template first (Templates tab)', true); return; }
@@ -639,7 +947,7 @@ sendBtn.onclick = async () => {
   for (const email of emails) {
     const guest = guests.find(g => g.email === email);
     const el = document.getElementById('status-' + cssId(email));
-    if (el) { el.className = 'status generating'; el.textContent = 'Sending...'; }
+    if (el) { el.className = 'status-dot working'; el.innerHTML = '<span class="dot"></span>Sending...'; }
 
     try {
       const res = await fetch('/api/process-one', {
@@ -650,24 +958,25 @@ sendBtn.onclick = async () => {
 
       if (result.ok) {
         sentCount++;
-        if (el) { el.className = 'status sent'; el.textContent = '✓ Sent'; }
+        if (el) { el.className = 'status-dot delivered'; el.innerHTML = '<span class="dot"></span>Delivered'; }
       } else {
         errorCount++;
-        if (el) { el.className = 'status error'; el.textContent = 'Failed'; }
+        if (el) { el.className = 'status-dot failed'; el.innerHTML = '<span class="dot"></span>Failed'; }
         showToast(`Failed for ${guest ? guest.name : email}: ${result.error}`, true);
       }
     } catch (err) {
       errorCount++;
-      if (el) { el.className = 'status error'; el.textContent = 'Failed'; }
+      if (el) { el.className = 'status-dot failed'; el.innerHTML = '<span class="dot"></span>Failed'; }
       showToast(`Failed for ${guest ? guest.name : email}: ${err.message}`, true);
     }
 
-    await new Promise(r => setTimeout(r, 3500)); // throttle between guests — stays under Gemini's free-tier ~20/min rate limit
+    await new Promise(r => setTimeout(r, 3500)); // throttle between guests
   }
 
   sendBtn.disabled = false;
   sendBtn.textContent = originalText;
   showToast(`Done — ${sentCount} sent${errorCount ? `, ${errorCount} failed` : ''}`, errorCount > 0);
+  checkedEmails.clear();
   loadGuests();
 };
 
@@ -680,6 +989,8 @@ function showToast(msg, isError) {
   setTimeout(() => t.remove(), 5000);
 }
 
+loadConfig();
+loadTemplates();
 loadGuests();
 </script>
 </body>

@@ -92,6 +92,8 @@ async function sendMailWithRetry(transporter, mail, attempts = 2) {
   }
 }
 
+app.get('/api/config', (req, res) => res.json({ fromEmail: config.auth.user }));
+
 app.get('/api/guests', async (req, res) => res.json(await loadGuests()));
 
 // Import guests (from paste or CSV upload). Merges by email — updates existing, adds new.
@@ -101,12 +103,13 @@ app.post('/api/guests/import', async (req, res) => {
   const byEmail = new Map(existing.map(g => [g.email.toLowerCase(), g]));
 
   for (const g of incoming) {
-    if (!g.email || !g.name) continue;
+    if (!g.email) continue;
     const key = g.email.toLowerCase();
     const prev = byEmail.get(key);
+    const name = (g.name || '').trim() || g.email.split('@')[0];
     byEmail.set(key, {
       id: prev?.id ?? crypto.randomUUID(),
-      name: g.name.trim(),
+      name,
       email: g.email.trim(),
       background: (g.background || '').trim(),
       topic: (g.topic || '').trim(),
@@ -304,6 +307,8 @@ app.post('/api/process-one', async (req, res) => {
       all2[idx2].sentAt = new Date().toISOString();
       all2[idx2].failed = false;
       all2[idx2].error = null;
+      all2[idx2].templateId = template.id;
+      all2[idx2].templateName = template.name;
       await saveGuests(all2);
     }
 
