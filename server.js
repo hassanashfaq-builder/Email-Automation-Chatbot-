@@ -25,9 +25,11 @@ function loadConfig() {
 }
 const config = loadConfig();
 const baseUrl = config.baseUrl || 'http://localhost:3344';
-// Off by default: a hidden 1x1 tracking image is a classic spam-filter
-// trigger ("web bug" detection). Opt in explicitly once deliverability
-// is otherwise solid (e.g. SPF/DKIM/DMARC configured for the domain).
+// Off by default. When enabling, note the pixel is now a plain (not
+// display:none-hidden) 1x1 image served from a path that doesn't say
+// "track" — see servePixel() below — which is a meaningfully lower spam-
+// filter risk than before, but still not zero. SPF/DKIM/DMARC on the
+// sending domain is the more durable fix for deliverability in general.
 const openTrackingEnabled = config.enableOpenTracking === true || config.enableOpenTracking === 'true';
 
 // 1x1 transparent PNG used as the open-tracking pixel
@@ -225,8 +227,11 @@ app.delete('/api/templates/:id', async (req, res) => {
   res.json(templates);
 });
 
-// Open-tracking pixel — embedded 1x1 image in each sent email
-app.get('/api/track/:id.png', async (req, res) => {
+// Open-tracking pixel — embedded 1x1 image in each sent email. Served at
+// /api/e/ (not /api/track/) because some spam filters keyword-scan URLs for
+// "track"/"pixel"/"beacon"; /api/track/ is kept as an alias so pixels already
+// out in previously-sent emails keep working.
+async function servePixel(req, res) {
   res.setHeader('Content-Type', 'image/png');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.end(TRACKING_PIXEL);
@@ -245,7 +250,9 @@ app.get('/api/track/:id.png', async (req, res) => {
   } catch (err) {
     console.error('Failed to record open:', err.message);
   }
-});
+}
+app.get('/api/e/:id.png', servePixel);
+app.get('/api/track/:id.png', servePixel);
 
 // No bounce-webhook or inbox access exists to confirm real delivery, so
 // "delivered" is a heuristic: sent, not failed, and either opened or old
@@ -350,8 +357,11 @@ app.post('/api/process-one', async (req, res) => {
     const bodyIdx = withBody.findIndex(g => g.email === email);
     if (bodyIdx !== -1) { withBody[bodyIdx].body = body; await saveGuests(withBody); }
 
+    // No style="display:none" — an explicitly hidden element is a stronger
+    // spam-filter signal than a merely 1x1 image (which is invisible anyway
+    // purely by virtue of its size, the same way legitimate ESPs do it).
     const trackingPixel = openTrackingEnabled
-      ? `<img src="${baseUrl}/api/track/${guest.id}.png" width="1" height="1" alt="" style="display:none">`
+      ? `<img src="${baseUrl}/api/e/${guest.id}.png" width="1" height="1" alt="">`
       : '';
     const html = textToHtml(body) + trackingPixel;
     await sendMailWithRetry(transporter, {

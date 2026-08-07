@@ -7,5 +7,6 @@
     "pass": "YOUR_EMAIL_PASSWORD_HERE"
   },
   "fromName": "Your Name - Podcast",
-  "baseUrl": "http://localhost:3344"
+  "baseUrl": "http://localhost:3344",
+  "enableOpenTracking": false
 }
