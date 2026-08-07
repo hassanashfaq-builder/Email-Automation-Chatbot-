@@ -25,12 +25,19 @@ function loadConfig() {
 }
 const config = loadConfig();
 const baseUrl = config.baseUrl || 'http://localhost:3344';
-// Off by default. When enabling, note the pixel is now a plain (not
-// display:none-hidden) 1x1 image served from a path that doesn't say
-// "track" — see servePixel() below — which is a meaningfully lower spam-
-// filter risk than before, but still not zero. SPF/DKIM/DMARC on the
-// sending domain is the more durable fix for deliverability in general.
-const openTrackingEnabled = config.enableOpenTracking === true || config.enableOpenTracking === 'true';
+const baseUrlHost = (() => { try { return new URL(baseUrl).hostname; } catch (_) { return ''; } })();
+// *.vercel.app is Vercel's shared preview/prod domain — because it's free,
+// instant, and used by countless throwaway/phishing sites, many outbound
+// spam scanners (including whatever's rejecting these as 550 SPAM) flag
+// links/images pointing at it on sight, independent of how the <img> tag
+// itself looks. Confirmed by this exact 550 recurring the moment tracking
+// (which points the pixel at this deployment's *.vercel.app URL) was
+// re-enabled. So: force tracking off while BASE_URL is still a vercel.app
+// host, regardless of ENABLE_OPEN_TRACKING — a real fix needs a custom
+// domain (e.g. a kianistan.com subdomain) pointed at this deployment via
+// Vercel's Domains settings, with BASE_URL updated to match.
+const onSharedVercelDomain = /(^|\.)vercel\.app$/i.test(baseUrlHost);
+const openTrackingEnabled = !onSharedVercelDomain && (config.enableOpenTracking === true || config.enableOpenTracking === 'true');
 
 // 1x1 transparent PNG used as the open-tracking pixel
 const TRACKING_PIXEL = Buffer.from(
@@ -107,7 +114,11 @@ async function sendMailWithRetry(transporter, mail, attempts = 2) {
   }
 }
 
-app.get('/api/config', (req, res) => res.json({ fromEmail: config.auth.user, openTrackingEnabled }));
+app.get('/api/config', (req, res) => res.json({
+  fromEmail: config.auth.user,
+  openTrackingEnabled,
+  openTrackingBlockedReason: onSharedVercelDomain ? 'BASE_URL is a *.vercel.app domain — set a custom domain to enable tracking' : null,
+}));
 
 app.get('/api/guests', async (req, res) => res.json(await loadGuests()));
 
@@ -386,7 +397,10 @@ app.post('/api/process-one', async (req, res) => {
 
     res.json({ ok: true });
   } catch (err) {
-    fail(err.message);
+    // err.response is the SMTP server's full raw reply (sometimes multi-line,
+    // e.g. a spam-score breakdown) — err.message is often just a generic
+    // "Message failed: <code>" summary of it, so prefer the fuller text.
+    fail(err.response || err.message);
   }
 });
 
