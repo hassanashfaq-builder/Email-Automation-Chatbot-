@@ -38,6 +38,14 @@ const TRACKING_PIXEL = Buffer.from(
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
+// Dynamic JSON data — without this, browsers/proxies can heuristically
+// cache these GET responses (no Cache-Control/Last-Modified to say
+// otherwise), which is why "Sync" could keep showing stale counts until
+// enough time passed for that heuristic cache to expire on its own.
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 function textToHtml(text) {
@@ -302,6 +310,11 @@ app.post('/api/process-one', async (req, res) => {
       all[idx].failed = true;
       all[idx].failedAt = new Date().toISOString();
       all[idx].error = message;
+      // record which template this attempt used even on failure — otherwise
+      // a guest who's never successfully sent has no templateId at all, and
+      // the Analytics template filter would silently drop them from every list
+      all[idx].templateId = template.id;
+      all[idx].templateName = template.name;
       await saveGuests(all);
     }
     return res.json({ ok: false, error: message });

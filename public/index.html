@@ -73,6 +73,7 @@
   tr.row-removing { opacity: 0.4; pointer-events: none; transition: opacity 0.15s; }
   .name-cell { font-weight: 600; }
   .email-cell { color: var(--muted); }
+  .bg-cell { color: var(--muted); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .link-btn { background: none; border: none; color: var(--accent); text-decoration: underline; cursor: pointer; font-size: 12px; padding: 0; margin-right: 10px; }
   .link-btn.danger { color: var(--red); }
   .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
@@ -169,7 +170,6 @@
   .send-progress-count { font-size: 22px; font-weight: 700; margin: 10px 0 14px; }
   .progress-track { background: #0d0f13; border: 1px solid var(--border); border-radius: 20px; height: 8px; overflow: hidden; margin-bottom: 10px; }
   .progress-fill { height: 100%; background: var(--accent); border-radius: 20px; transition: width 0.25s ease; width: 0%; }
-  .send-current-name { font-size: 12.5px; color: var(--muted); min-height: 16px; }
   .send-result-icon { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto; background: rgba(62,207,142,0.15); color: var(--green); }
   .send-result-grid { display: flex; gap: 10px; justify-content: center; margin-top: 4px; }
   .send-result-item { flex: 1; background: #14161c; border: 1px solid var(--border); border-radius: 10px; padding: 14px 8px; }
@@ -330,7 +330,7 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
         <table>
           <thead>
             <tr>
-              <th style="width:30px"></th><th>Name</th><th>Email</th><th>Status</th>
+              <th style="width:30px"></th><th>Name</th><th>Email</th><th>Background</th><th>Status</th>
               <th>Template</th><th>Sent At</th><th style="text-align:right">Actions</th>
             </tr>
           </thead>
@@ -380,9 +380,18 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
     </div>
 
     <div id="analyticsView" style="display:none">
-      <div class="row" style="justify-content:flex-end; margin-top:0; margin-bottom:14px">
-        <span class="count" id="statLastSynced"></span>
-        <button class="secondary" id="syncStatsBtn">Sync now</button>
+      <div class="row" style="justify-content:space-between; margin-top:0; margin-bottom:14px">
+        <div class="dropdown" id="analyticsTemplateDropdown">
+          <button type="button" class="dropdown-trigger" id="analyticsTemplateDropdownBtn">
+            <span id="analyticsTemplateDropdownLabel">All templates</span>
+            <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="dropdown-menu" id="analyticsTemplateDropdownMenu"></div>
+        </div>
+        <div class="row" style="margin-top:0">
+          <span class="count" id="statLastSynced"></span>
+          <button class="secondary" id="syncStatsBtn">Sync now</button>
+        </div>
       </div>
       <div class="stat-cards">
         <div class="stat-card2" data-astat="sent">
@@ -459,19 +468,14 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
       <h3>Sending invitations…</h3>
       <div class="send-progress-count" id="sendProgressCount">0 / 0</div>
       <div class="progress-track"><div class="progress-fill" id="sendProgressFill"></div></div>
-      <div class="send-current-name" id="sendCurrentName"></div>
     </div>
     <div id="sendResultView" style="display:none">
       <div class="send-result-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
       <h3>Sending complete</h3>
       <div class="send-result-grid">
         <div class="send-result-item">
-          <div class="send-result-num" id="resultTotalNum" style="color:var(--yellow)">0</div>
+          <div class="send-result-num" id="resultSentNum" style="color:var(--green)">0</div>
           <div class="send-result-label">Sent</div>
-        </div>
-        <div class="send-result-item">
-          <div class="send-result-num" id="resultDeliveredNum" style="color:var(--green)">0</div>
-          <div class="send-result-label">Delivered</div>
         </div>
         <div class="send-result-item">
           <div class="send-result-num" id="resultFailedNum" style="color:var(--red)">0</div>
@@ -558,7 +562,7 @@ function setActiveNav(view) {
   document.getElementById('guestsView').style.display = view === 'guests' ? 'block' : 'none';
   document.getElementById('templatesView').style.display = view === 'templates' ? 'block' : 'none';
   document.getElementById('analyticsView').style.display = view === 'analytics' ? 'block' : 'none';
-  if (view === 'analytics') loadStats();
+  if (view === 'analytics') loadAnalytics();
   if (view === 'templates') loadTemplates();
 }
 document.querySelectorAll('.sidebar-nav .navitem').forEach(item => item.onclick = () => setActiveNav(item.dataset.view));
@@ -625,11 +629,12 @@ async function loadTemplates() {
   if (!templatesLoadedOnce) {
     document.getElementById('templateRows').innerHTML = tableLoadingRow(4, 'Loading templates...');
   }
-  const res = await fetch('/api/templates');
+  const res = await fetch('/api/templates', { cache: 'no-store' });
   templates = await res.json();
   templatesLoadedOnce = true;
   renderTemplateRows();
   renderTemplateSelect();
+  renderAnalyticsTemplateDropdown();
 }
 
 function renderTemplateRows() {
@@ -739,24 +744,46 @@ document.getElementById('saveTemplateBtn').onclick = async () => {
 renderVarsPreview();
 
 // ---- analytics (formerly "Email Stats") ----
+// Computed entirely client-side from the same `guests` array the Guests
+// page uses, rather than a separate /api/stats fetch — that separate call
+// was a second, easy-to-forget-to-refresh source of truth, which is why
+// Sync could look like it wasn't doing anything: it was refetching /api/stats
+// while the underlying guest data (e.g. a just-recorded open) had already
+// changed. One source of truth means Sync now always reflects it.
 let statsData = null;
 let activeStat = 'delivered';
+let analyticsTemplateFilter = null; // null = all templates
 
-let statsLoadedOnce = false;
-async function loadStats() {
-  if (!statsLoadedOnce) {
+function analyticsGuests() {
+  return analyticsTemplateFilter ? guests.filter(g => g.templateId === analyticsTemplateFilter) : guests;
+}
+
+function renderAnalytics() {
+  const list = analyticsGuests();
+  const sent = list.filter(g => g.sent).map(g => ({ name: g.name, email: g.email, sentAt: g.sentAt }));
+  const delivered = list.filter(g => ['delivered', 'opened'].includes(guestDeliveryState(g))).map(g => ({ name: g.name, email: g.email, sentAt: g.sentAt }));
+  const opened = list.filter(g => g.opened).map(g => ({ name: g.name, email: g.email, openedAt: g.openedAt, openCount: g.openCount || 0 }));
+  const notDelivered = list.filter(g => g.failed).map(g => ({ name: g.name, email: g.email, failedAt: g.failedAt, error: g.error }));
+
+  statsData = { sent, delivered, opened, replied: [], notDelivered };
+
+  document.getElementById('statLastSynced').textContent = 'Last synced: ' + new Date().toLocaleTimeString();
+  document.getElementById('statSentNum').textContent = sent.length;
+  document.getElementById('statDeliveredNum').textContent = delivered.length;
+  document.getElementById('statOpenedNum').textContent = opened.length;
+  document.getElementById('statRepliedNum').textContent = 0;
+  document.getElementById('statNotDeliveredNum').textContent = notDelivered.length;
+  renderStatSection();
+}
+
+let analyticsLoadedOnce = false;
+async function loadAnalytics() {
+  if (!analyticsLoadedOnce) {
     document.getElementById('statRows').innerHTML = tableLoadingRow(3, 'Loading stats...');
   }
-  const res = await fetch('/api/stats');
-  statsData = await res.json();
-  statsLoadedOnce = true;
-  document.getElementById('statLastSynced').textContent = 'Last synced: ' + new Date().toLocaleTimeString();
-  document.getElementById('statSentNum').textContent = statsData.totals.sent;
-  document.getElementById('statDeliveredNum').textContent = statsData.totals.delivered;
-  document.getElementById('statOpenedNum').textContent = statsData.totals.opened;
-  document.getElementById('statRepliedNum').textContent = statsData.totals.replied;
-  document.getElementById('statNotDeliveredNum').textContent = statsData.totals.notDelivered;
-  renderStatSection();
+  await loadGuests(); // always refetch so this reflects the latest opens/deliveries, not a stale snapshot
+  analyticsLoadedOnce = true;
+  renderAnalytics();
 }
 
 const STAT_META = {
@@ -798,9 +825,40 @@ document.querySelectorAll('#analyticsView .stat-card2').forEach(card => card.onc
   renderStatSection();
 });
 
+// ---- analytics template filter (same custom-dropdown pattern as the send template picker) ----
+function renderAnalyticsTemplateDropdown() {
+  if (analyticsTemplateFilter && !templates.some(t => t.id === analyticsTemplateFilter)) {
+    analyticsTemplateFilter = null;
+  }
+  const menu = document.getElementById('analyticsTemplateDropdownMenu');
+  const allItem = `<div class="dropdown-item ${!analyticsTemplateFilter ? 'selected' : ''}" data-analytics-template-option="">All templates</div>`;
+  const items = templates.map(t => `<div class="dropdown-item ${t.id === analyticsTemplateFilter ? 'selected' : ''}" data-analytics-template-option="${t.id}">${escapeHtml(t.name)}</div>`).join('');
+  menu.innerHTML = allItem + items;
+  document.getElementById('analyticsTemplateDropdownLabel').textContent =
+    analyticsTemplateFilter ? (templates.find(t => t.id === analyticsTemplateFilter)?.name || 'All templates') : 'All templates';
+}
+
+const analyticsTemplateDropdown = document.getElementById('analyticsTemplateDropdown');
+document.getElementById('analyticsTemplateDropdownBtn').onclick = (e) => {
+  e.stopPropagation();
+  analyticsTemplateDropdown.classList.toggle('open');
+};
+document.getElementById('analyticsTemplateDropdownMenu').addEventListener('click', (e) => {
+  const item = e.target.closest('[data-analytics-template-option]');
+  if (!item) return;
+  analyticsTemplateFilter = item.dataset.analyticsTemplateOption || null;
+  analyticsTemplateDropdown.classList.remove('open');
+  renderAnalyticsTemplateDropdown();
+  renderAnalytics();
+});
+document.addEventListener('click', (e) => {
+  if (!analyticsTemplateDropdown.contains(e.target)) analyticsTemplateDropdown.classList.remove('open');
+});
+
 document.getElementById('syncStatsBtn').onclick = async () => {
   await withButtonLoading(document.getElementById('syncStatsBtn'), 'Syncing...', async () => {
-    await loadStats();
+    await loadAnalytics();
+    showToast('Synced');
   });
 };
 
@@ -840,9 +898,9 @@ document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
 let guestsLoadedOnce = false;
 async function loadGuests() {
   if (!guestsLoadedOnce) {
-    guestRows.innerHTML = tableLoadingRow(7, 'Loading guests...');
+    guestRows.innerHTML = tableLoadingRow(8, 'Loading guests...');
   }
-  const res = await fetch('/api/guests');
+  const res = await fetch('/api/guests', { cache: 'no-store' });
   guests = await res.json();
   guestsLoadedOnce = true;
   // default newly-seen, not-yet-sent guests to checked (once) so a fresh
@@ -904,6 +962,7 @@ function render() {
       <td><input type="checkbox" data-email="${g.email}" ${checkedEmails.has(g.email) ? 'checked' : ''}></td>
       <td class="name-cell">${escapeHtml(g.name)}</td>
       <td class="email-cell">${escapeHtml(g.email)}</td>
+      <td class="bg-cell" title="${escapeHtml(g.background || '')}">${escapeHtml(g.background || '—')}</td>
       <td><span class="status-dot ${st.cls}" id="status-${cssId(g.email)}"><span class="dot"></span>${st.label}</span></td>
       <td>${escapeHtml(g.templateName || '—')}</td>
       <td>${relativeTime(g.sentAt)}</td>
@@ -1305,21 +1364,18 @@ function openSendModal(total) {
   document.getElementById('sendResultView').style.display = 'none';
   document.getElementById('sendProgressFill').style.width = '0%';
   document.getElementById('sendProgressCount').textContent = `0 / ${total}`;
-  document.getElementById('sendCurrentName').textContent = '';
   document.getElementById('sendModalBackdrop').style.display = 'flex';
 }
 
-function updateSendModalProgress(done, total, currentName) {
+function updateSendModalProgress(done, total) {
   document.getElementById('sendProgressCount').textContent = `${done} / ${total}`;
   document.getElementById('sendProgressFill').style.width = `${Math.round((done / total) * 100)}%`;
-  document.getElementById('sendCurrentName').textContent = currentName ? `Sending to ${currentName}…` : '';
 }
 
-function showSendModalResult(total, deliveredCount, failedCount) {
+function showSendModalResult(sentCount, failedCount) {
   document.getElementById('sendProgressView').style.display = 'none';
   document.getElementById('sendResultView').style.display = 'block';
-  document.getElementById('resultTotalNum').textContent = total;
-  document.getElementById('resultDeliveredNum').textContent = deliveredCount;
+  document.getElementById('resultSentNum').textContent = sentCount;
   document.getElementById('resultFailedNum').textContent = failedCount;
 }
 
@@ -1336,21 +1392,18 @@ sendBtn.onclick = async () => {
   if (!confirm(`Send "${templateName}" to ${emails.length} guest(s)? This will actually send real emails.`)) return;
 
   openSendModal(emails.length);
-  let deliveredCount = 0, failedCount = 0;
+  let sentCount = 0, failedCount = 0;
 
   for (let i = 0; i < emails.length; i++) {
     const email = emails[i];
-    const guest = guests.find(g => g.email === email);
-    updateSendModalProgress(i, emails.length, guest ? guest.name : email);
-
     const result = await sendOneGuest(email, templateId);
-    if (result.ok) deliveredCount++; else failedCount++;
-    updateSendModalProgress(i + 1, emails.length, null);
+    if (result.ok) sentCount++; else failedCount++;
+    updateSendModalProgress(i + 1, emails.length);
 
     if (i < emails.length - 1) await new Promise(r => setTimeout(r, 3500)); // throttle between guests
   }
 
-  showSendModalResult(emails.length, deliveredCount, failedCount);
+  showSendModalResult(sentCount, failedCount);
   checkedEmails.clear();
   await loadGuests();
 };
