@@ -6,7 +6,7 @@
 <style>
   :root {
     --bg: #0f1115; --card: #1a1d24; --border: #2a2e38; --text: #e8e9ec;
-    --muted: #9199a8; --accent: #4f8cff; --accent-hover: #6fa1ff;
+    --muted: #9199a8; --accent: #3b6fed; --accent-hover: #2f5ce0;
     --green: #3ecf8e; --red: #ff6b6b; --yellow: #f5c04a; --purple: #b183f5;
     --sidebar-w: 220px; --sidebar-w-collapsed: 64px;
   }
@@ -42,7 +42,7 @@
   .sidebar-nav { display: flex; flex-direction: column; gap: 4px; }
   .navitem { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 8px; font-size: 13.5px; font-weight: 500; color: var(--muted); cursor: pointer; }
   .navitem:hover { background: #1a1d24; color: var(--text); }
-  .navitem.active { background: rgba(79,140,255,0.12); color: var(--accent); }
+  .navitem.active { background: rgba(59,111,237,0.14); color: var(--accent); }
   .navitem .icon { width: 18px; display: flex; flex-shrink: 0; }
   .sidebar-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border); padding-top: 14px; }
   .main-area { flex: 1; min-width: 0; padding: 24px 28px; }
@@ -92,7 +92,7 @@
   .stat-card2 .stat-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
   .stat-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .stat-icon.delivered { background: rgba(62,207,142,0.15); color: var(--green); }
-  .stat-icon.opened { background: rgba(79,140,255,0.15); color: var(--accent); }
+  .stat-icon.opened { background: rgba(59,111,237,0.15); color: var(--accent); }
   .stat-icon.replies { background: rgba(177,131,245,0.15); color: var(--purple); }
   .stat-icon.failed { background: rgba(255,107,107,0.15); color: var(--red); }
   .stat-card2 .stat-label { font-size: 13px; color: var(--muted); font-weight: 500; }
@@ -104,7 +104,7 @@
   .stat-card2 .stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
 
   /* ---- two column ---- */
-  .two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start; }
+  .two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start; margin-bottom: 24px; }
   @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
   .tips-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
   .tips-list li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
