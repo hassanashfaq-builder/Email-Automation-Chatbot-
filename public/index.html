@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Kianistan Podcast — Invitation Mailer</title>
+<title>DevLyncs - Invitation Mailer</title>
 <style>
   :root {
     --bg: #0f1115; --card: #1a1d24; --border: #2a2e38; --text: #e8e9ec;
@@ -27,7 +27,7 @@
   /* ---- topbar ---- */
   .topbar { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; position: sticky; top: 0; z-index: 20; background: var(--bg); }
   .topbar-left { display: flex; align-items: center; gap: 12px; }
-  .app-icon { width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, var(--accent), #7b5cf5); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .app-icon { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .topbar h1 { font-size: 17px; margin: 0; font-weight: 600; }
   .topbar p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
   .topbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -197,11 +197,52 @@
 <div class="topbar">
   <div class="topbar-left">
     <div class="app-icon">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      <svg width="34" height="28" viewBox="0 0 260 210" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="dl-metal" x1="0" y1="0" x2="0.25" y2="1">
+            <stop offset="0%"   stop-color="#eafaf6"/>
+            <stop offset="22%"  stop-color="#9fd8cd"/>
+            <stop offset="48%"  stop-color="#2bb3a3"/>
+            <stop offset="72%"  stop-color="#0d9488"/>
+            <stop offset="100%" stop-color="#075a52"/>
+          </linearGradient>
+          <linearGradient id="dl-edge" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stop-color="#ffffff"/>
+            <stop offset="45%"  stop-color="#cdeee7"/>
+            <stop offset="100%" stop-color="#3a8f85"/>
+          </linearGradient>
+          <linearGradient id="dl-sheen" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.55"/>
+            <stop offset="22%"  stop-color="#ffffff" stop-opacity="0"/>
+            <stop offset="70%"  stop-color="#ffffff" stop-opacity="0"/>
+            <stop offset="88%"  stop-color="#ffffff" stop-opacity="0.18"/>
+            <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+          </linearGradient>
+          <filter id="dl-glow" x="-25%" y="-25%" width="150%" height="150%">
+            <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#0d9488" flood-opacity="0.45"/>
+          </filter>
+          <filter id="dl-inner" x="-20%" y="-20%" width="140%" height="140%">
+            <feOffset dx="0" dy="-3" in="SourceAlpha" result="o"/>
+            <feGaussianBlur in="o" stdDeviation="3" result="b"/>
+            <feComposite in="b" in2="SourceAlpha" operator="arithmetic" k2="-1" k3="1" result="sh"/>
+            <feColorMatrix in="sh" type="matrix" values="0 0 0 0 0.01  0 0 0 0 0.28  0 0 0 0 0.25  0 0 0 0.5 0"/>
+          </filter>
+        </defs>
+        <g filter="url(#dl-glow)">
+          <path id="dl-d" d="M 28 30 L 116 30 C 158 30 186 60 186 105 C 186 150 158 180 116 180 L 28 180 L 28 158 L 48 138 L 48 72 L 28 52 Z M 68 64 L 68 146 L 110 146 C 134 146 150 128 150 105 C 150 82 134 64 110 64 Z" fill="url(#dl-metal)" fill-rule="evenodd"/>
+          <path id="dl-l" d="M 178 30 L 220 30 L 220 52 L 208 64 L 208 146 L 254 146 L 254 158 L 240 180 L 178 180 Z" fill="url(#dl-metal)"/>
+        </g>
+        <use href="#dl-d" filter="url(#dl-inner)"/>
+        <use href="#dl-l" filter="url(#dl-inner)"/>
+        <use href="#dl-d" fill="url(#dl-sheen)"/>
+        <use href="#dl-l" fill="url(#dl-sheen)"/>
+        <use href="#dl-d" fill="none" stroke="url(#dl-edge)" stroke-width="2.5" stroke-linejoin="round"/>
+        <use href="#dl-l" fill="none" stroke="url(#dl-edge)" stroke-width="2.5" stroke-linejoin="round"/>
+      </svg>
     </div>
     <div>
-      <h1>Kianistan Podcast — Invitation Mailer</h1>
-      <p>Send personalized invitations to podcast guests</p>
+      <h1>DevLyncs - Invitation Mailer</h1>
+      <p>Send personalized emails to enyone with us</p>
     </div>
   </div>
   <div class="topbar-right">
