@@ -262,7 +262,7 @@ Alfred de Zayas | alfred@example.com | UN Independent Expert, former OHCHR senio
 Jane Smith | jane@example.com | Professor of international law at Oxford, author of three books on sanctions law"></textarea>
               <span class="char-count" id="pastePreviewCount">0 guests</span>
             </div>
-            <div class="hint">Column order doesn't matter — the email is auto-detected wherever it appears in each row.<br>Works with spreadsheet copy-paste (tabs) or the Name | Email | Background format.</div>
+            <div class="hint">Column order doesn't matter — the email is auto-detected wherever it appears in each row.<br>Works with spreadsheet copy-paste (tabs), or Name | Email | Background, or Name, Email, Background.</div>
             <div class="row"><button id="importPasteBtn">Add to list</button></div>
           </div>
 
@@ -1180,7 +1180,7 @@ deleteBtn.onclick = async () => {
 const EMAIL_RE_G = /[^\s,;<>]+@[^\s,;<>]+\.[^\s,;<>]+/g;
 
 function parsePastedGuests(raw) {
-  const delim = raw.includes('\t') ? '\t' : (raw.includes('|') ? '|' : null);
+  const delim = raw.includes('\t') ? '\t' : (raw.includes('|') ? '|' : (raw.includes(',') ? ',' : null));
   const firstField = (line) => (delim ? line.split(delim)[0] : line).trim();
   const hasEmail = (line) => { EMAIL_RE_G.lastIndex = 0; return EMAIL_RE_G.test(line); };
 
