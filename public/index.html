@@ -367,6 +367,13 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
             </button>
             <div class="dropdown-menu" id="statusFilterDropdownMenu"></div>
           </div>
+          <div class="dropdown" id="dateFilterDropdown">
+            <button type="button" class="dropdown-trigger" id="dateFilterDropdownBtn">
+              <span id="dateFilterDropdownLabel">All time</span>
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="dropdown-menu" id="dateFilterDropdownMenu"></div>
+          </div>
           <span style="flex:1"></span>
           <div class="search-wrap">
             <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
@@ -758,6 +765,55 @@ document.addEventListener('click', (e) => {
   if (!statusFilterDropdown.contains(e.target)) statusFilterDropdown.classList.remove('open');
 });
 
+// ---- guest list date filter (filters on Sent At; same custom-dropdown pattern) ----
+let dateFilter = null; // null = all time
+const DATE_FILTER_OPTIONS = [
+  { value: '', label: 'All time' },
+  { value: 'today', label: 'Today' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+];
+
+function passesDateFilter(g) {
+  if (!dateFilter) return true;
+  if (!g.sentAt) return false;
+  const sentTime = new Date(g.sentAt).getTime();
+  if (dateFilter === 'today') {
+    const start = new Date(); start.setHours(0, 0, 0, 0);
+    return sentTime >= start.getTime();
+  }
+  const days = dateFilter === '7d' ? 7 : 30;
+  return Date.now() - sentTime <= days * 24 * 60 * 60 * 1000;
+}
+
+function renderDateFilterDropdown() {
+  const menu = document.getElementById('dateFilterDropdownMenu');
+  menu.innerHTML = DATE_FILTER_OPTIONS.map(o =>
+    `<div class="dropdown-item ${(dateFilter || '') === o.value ? 'selected' : ''}" data-date-filter-option="${o.value}">${o.label}</div>`
+  ).join('');
+  document.getElementById('dateFilterDropdownLabel').textContent =
+    DATE_FILTER_OPTIONS.find(o => o.value === (dateFilter || ''))?.label || 'All time';
+}
+renderDateFilterDropdown();
+
+const dateFilterDropdown = document.getElementById('dateFilterDropdown');
+document.getElementById('dateFilterDropdownBtn').onclick = (e) => {
+  e.stopPropagation();
+  dateFilterDropdown.classList.toggle('open');
+};
+document.getElementById('dateFilterDropdownMenu').addEventListener('click', (e) => {
+  const item = e.target.closest('[data-date-filter-option]');
+  if (!item) return;
+  dateFilter = item.dataset.dateFilterOption || null;
+  dateFilterDropdown.classList.remove('open');
+  renderDateFilterDropdown();
+  currentPage = 1;
+  applyFilters();
+});
+document.addEventListener('click', (e) => {
+  if (!dateFilterDropdown.contains(e.target)) dateFilterDropdown.classList.remove('open');
+});
+
 document.getElementById('templateRows').addEventListener('click', async (e) => {
   // .closest() rather than e.target directly — clicking the icon glyph
   // inside the button makes e.target the svg/path, not the button itself.
@@ -979,6 +1035,7 @@ function applyFilters() {
   filteredGuests = guests.filter(g => {
     if (q && !(g.name.toLowerCase().includes(q) || g.email.toLowerCase().includes(q))) return false;
     if (statusFilter && guestDeliveryState(g) !== statusFilter) return false;
+    if (!passesDateFilter(g)) return false;
     return true;
   });
 
