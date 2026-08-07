@@ -4,8 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const dns = require('dns');
-const { generateInvitation } = require('./lib/generate');
-const { loadGuests, saveGuests } = require('./lib/db');
+const { loadGuests, saveGuests, loadTemplates, saveTemplates } = require('./lib/db');
+const { fillTemplate } = require('./lib/templates');
 
 function loadConfig() {
   const configPath = path.join(__dirname, 'config.json');
@@ -19,9 +19,6 @@ function loadConfig() {
     secure: process.env.SMTP_SECURE !== 'false',
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     fromName: process.env.FROM_NAME,
-    subject: process.env.EMAIL_SUBJECT,
-    geminiApiKey: process.env.GEMINI_API_KEY,
-    geminiModel: process.env.GEMINI_MODEL || 'gemini-flash-latest',
     baseUrl: process.env.BASE_URL || 'http://localhost:3344',
   };
 }
@@ -136,6 +133,48 @@ app.delete('/api/guests/:email', async (req, res) => {
   res.json(guests);
 });
 
+app.get('/api/templates', async (req, res) => res.json(await loadTemplates()));
+
+app.post('/api/templates', async (req, res) => {
+  const { name, subject, body } = req.body;
+  if (!name || !subject || !body) {
+    return res.status(400).json({ error: 'name, subject, and body are all required' });
+  }
+  const templates = await loadTemplates();
+  const template = {
+    id: crypto.randomUUID(),
+    name: name.trim(),
+    subject: subject.trim(),
+    body,
+    createdAt: new Date().toISOString(),
+  };
+  templates.push(template);
+  await saveTemplates(templates);
+  res.json(template);
+});
+
+app.put('/api/templates/:id', async (req, res) => {
+  const { name, subject, body } = req.body;
+  const templates = await loadTemplates();
+  const idx = templates.findIndex(t => t.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Template not found' });
+  templates[idx] = {
+    ...templates[idx],
+    name: name?.trim() ?? templates[idx].name,
+    subject: subject?.trim() ?? templates[idx].subject,
+    body: body ?? templates[idx].body,
+    updatedAt: new Date().toISOString(),
+  };
+  await saveTemplates(templates);
+  res.json(templates[idx]);
+});
+
+app.delete('/api/templates/:id', async (req, res) => {
+  const templates = (await loadTemplates()).filter(t => t.id !== req.params.id);
+  await saveTemplates(templates);
+  res.json(templates);
+});
+
 // Open-tracking pixel — embedded 1x1 image in each sent email
 app.get('/api/track/:id.png', async (req, res) => {
   res.setHeader('Content-Type', 'image/png');
@@ -184,10 +223,14 @@ app.get('/api/stats', async (req, res) => {
 // within a serverless function's execution time limit — the client drives
 // the batch by calling this once per selected guest.
 app.post('/api/process-one', async (req, res) => {
-  const { email } = req.body;
+  const { email, templateId } = req.body;
   const guests = await loadGuests();
   const guest = guests.find(g => g.email === email);
   if (!guest) return res.status(404).json({ ok: false, error: 'Guest not found' });
+
+  const templates = await loadTemplates();
+  const template = templates.find(t => t.id === templateId);
+  if (!template) return res.status(400).json({ ok: false, error: 'Template not found' });
 
   const fail = async (message) => {
     const all = await loadGuests();
@@ -225,7 +268,8 @@ app.post('/api/process-one', async (req, res) => {
       return fail(`SMTP connection failed: ${err.message}`);
     }
 
-    const body = await generateInvitation(guest, config);
+    const subject = fillTemplate(template.subject, guest);
+    const body = fillTemplate(template.body, guest);
 
     const withBody = await loadGuests();
     const bodyIdx = withBody.findIndex(g => g.email === email);
@@ -235,7 +279,7 @@ app.post('/api/process-one', async (req, res) => {
     await sendMailWithRetry(transporter, {
       from: `"${config.fromName}" <${config.auth.user}>`,
       to: guest.email,
-      subject: config.subject,
+      subject,
       text: body,
       html,
     });

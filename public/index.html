@@ -67,6 +67,12 @@
   .stat-card.opened .num { color: var(--accent); }
   .stat-card.notdelivered .num { color: var(--red); }
   .empty-hint { color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }
+  input[type=text], select { background: #0d0f13; border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 9px 10px; font-size: 13px; }
+  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+  .field label { font-size: 12px; color: var(--muted); font-weight: 500; }
+  .var-tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px; margin: 2px 4px 2px 0; }
+  .var-tag.recognized { background: rgba(62,207,142,0.15); color: var(--green); }
+  .var-tag.unrecognized { background: rgba(245,192,74,0.15); color: var(--yellow); }
 </style>
 </head>
 <body>
@@ -81,6 +87,7 @@
 
 <nav class="menubar">
   <div class="navitem active" data-view="guests">Guests</div>
+  <div class="navitem" data-view="templates">Templates</div>
   <div class="navitem" data-view="stats">Email Stats</div>
 </nav>
 
@@ -114,7 +121,8 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
       <button class="secondary" id="selectNoneBtn">Select none</button>
       <button class="secondary" id="selectFailedBtn">Select failed</button>
       <span style="flex:1"></span>
-      <button id="sendBtn">Generate &amp; Send (0)</button>
+      <select id="templateSelect" style="min-width:220px"></select>
+      <button id="sendBtn">Send (0)</button>
     </div>
 
     <table>
@@ -125,6 +133,39 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
     </table>
   </div>
 
+</div>
+
+<div class="container" id="templatesView" style="display:none">
+  <div class="card">
+    <h2 id="templateFormTitle">Add template</h2>
+    <div class="field">
+      <label for="templateNameInput">Template name</label>
+      <input type="text" id="templateNameInput" placeholder="e.g. Guest Invitation Email">
+    </div>
+    <div class="field">
+      <label for="templateSubjectInput">Subject</label>
+      <input type="text" id="templateSubjectInput" placeholder="e.g. Invitation to Join Kianistan Podcast">
+    </div>
+    <div class="field">
+      <label for="templateBodyInput">Email body</label>
+      <textarea id="templateBodyInput" style="min-height:220px" placeholder="Use [Full Name], [Background], [Topic], or [Email] anywhere you want guest data inserted."></textarea>
+    </div>
+    <div id="templateVarsPreview" class="hint"></div>
+    <div class="row">
+      <button id="saveTemplateBtn">Save template</button>
+      <button class="secondary" id="cancelEditTemplateBtn" style="display:none">Cancel edit</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Your templates</h2>
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Subject</th><th>Variables</th><th></th></tr>
+      </thead>
+      <tbody id="templateRows"></tbody>
+    </table>
+  </div>
 </div>
 
 <div class="container" id="statsView" style="display:none">
@@ -180,9 +221,121 @@ document.querySelectorAll('nav.menubar .navitem').forEach(item => item.onclick =
   document.querySelectorAll('nav.menubar .navitem').forEach(x => x.classList.remove('active'));
   item.classList.add('active');
   document.getElementById('guestsView').style.display = item.dataset.view === 'guests' ? 'block' : 'none';
+  document.getElementById('templatesView').style.display = item.dataset.view === 'templates' ? 'block' : 'none';
   document.getElementById('statsView').style.display = item.dataset.view === 'stats' ? 'block' : 'none';
   if (item.dataset.view === 'stats') loadStats();
+  if (item.dataset.view === 'templates') loadTemplates();
 });
+
+// ---- templates ----
+let templates = [];
+let editingTemplateId = null;
+const VARIABLE_RE_CLIENT = /\[([^\]]+)\]/g;
+const RECOGNIZED_VARS = ['name', 'full name', 'fullname', 'guest name', 'background', 'about', 'bio', 'topic', 'email'];
+
+function detectVariablesClient(text) {
+  const found = new Set();
+  let m;
+  const re = new RegExp(VARIABLE_RE_CLIENT);
+  while ((m = re.exec(text || ''))) found.add(m[1].trim());
+  return [...found].map(label => ({ label, recognized: RECOGNIZED_VARS.includes(label.toLowerCase()) }));
+}
+
+function renderVarsPreview() {
+  const text = document.getElementById('templateSubjectInput').value + ' ' + document.getElementById('templateBodyInput').value;
+  const vars = detectVariablesClient(text);
+  const el = document.getElementById('templateVarsPreview');
+  if (!vars.length) { el.textContent = 'No [Variables] detected yet. Wrap guest data in brackets, e.g. [Full Name].'; return; }
+  el.innerHTML = 'Detected: ' + vars.map(v =>
+    `<span class="var-tag ${v.recognized ? 'recognized' : 'unrecognized'}">[${escapeHtml(v.label)}]${v.recognized ? '' : ' — unrecognized, will be left as-is'}</span>`
+  ).join('');
+}
+document.getElementById('templateSubjectInput').addEventListener('input', renderVarsPreview);
+document.getElementById('templateBodyInput').addEventListener('input', renderVarsPreview);
+
+async function loadTemplates() {
+  const res = await fetch('/api/templates');
+  templates = await res.json();
+  renderTemplateRows();
+  renderTemplateSelect();
+}
+
+function renderTemplateRows() {
+  const tbody = document.getElementById('templateRows');
+  tbody.innerHTML = templates.map(t => {
+    const vars = detectVariablesClient(t.subject + ' ' + t.body);
+    return `
+      <tr>
+        <td class="name-cell">${escapeHtml(t.name)}</td>
+        <td>${escapeHtml(t.subject)}</td>
+        <td>${vars.map(v => `<span class="var-tag ${v.recognized ? 'recognized' : 'unrecognized'}">[${escapeHtml(v.label)}]</span>`).join('') || '—'}</td>
+        <td>
+          <button class="link-btn" data-edit-template="${t.id}">Edit</button>
+          <button class="link-btn danger" data-delete-template="${t.id}">Delete</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderTemplateSelect() {
+  const sel = document.getElementById('templateSelect');
+  const prev = sel.value;
+  sel.innerHTML = templates.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+  if (templates.some(t => t.id === prev)) sel.value = prev;
+}
+
+document.getElementById('templateRows').addEventListener('click', async (e) => {
+  const editId = e.target.dataset.editTemplate;
+  const deleteId = e.target.dataset.deleteTemplate;
+  if (editId) {
+    const t = templates.find(x => x.id === editId);
+    editingTemplateId = t.id;
+    document.getElementById('templateFormTitle').textContent = 'Edit template';
+    document.getElementById('templateNameInput').value = t.name;
+    document.getElementById('templateSubjectInput').value = t.subject;
+    document.getElementById('templateBodyInput').value = t.body;
+    document.getElementById('saveTemplateBtn').textContent = 'Save changes';
+    document.getElementById('cancelEditTemplateBtn').style.display = 'inline-block';
+    renderVarsPreview();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  if (deleteId) {
+    if (!confirm('Delete this template?')) return;
+    await fetch('/api/templates/' + deleteId, { method: 'DELETE' });
+    showToast('Template deleted');
+    loadTemplates();
+  }
+});
+
+function resetTemplateForm() {
+  editingTemplateId = null;
+  document.getElementById('templateFormTitle').textContent = 'Add template';
+  document.getElementById('templateNameInput').value = '';
+  document.getElementById('templateSubjectInput').value = '';
+  document.getElementById('templateBodyInput').value = '';
+  document.getElementById('saveTemplateBtn').textContent = 'Save template';
+  document.getElementById('cancelEditTemplateBtn').style.display = 'none';
+  renderVarsPreview();
+}
+document.getElementById('cancelEditTemplateBtn').onclick = resetTemplateForm;
+
+document.getElementById('saveTemplateBtn').onclick = async () => {
+  const name = document.getElementById('templateNameInput').value.trim();
+  const subject = document.getElementById('templateSubjectInput').value.trim();
+  const body = document.getElementById('templateBodyInput').value;
+  if (!name || !subject || !body.trim()) { showToast('Name, subject, and body are all required', true); return; }
+
+  const url = editingTemplateId ? '/api/templates/' + editingTemplateId : '/api/templates';
+  const method = editingTemplateId ? 'PUT' : 'POST';
+  await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, subject, body }) });
+  showToast(editingTemplateId ? 'Template updated' : 'Template added');
+  resetTemplateForm();
+  loadTemplates();
+};
+
+renderVarsPreview();
+loadTemplates();
 
 let statsData = null;
 let activeStat = 'delivered';
@@ -287,7 +440,7 @@ function escapeHtml(s) { return (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','
 
 function updateSendCount() {
   const checked = guestRows.querySelectorAll('input[type=checkbox]:checked').length;
-  sendBtn.textContent = `Generate & Send (${checked})`;
+  sendBtn.textContent = `Send (${checked})`;
   sendBtn.disabled = checked === 0;
 }
 guestRows.addEventListener('change', (e) => { if (e.target.type === 'checkbox') updateSendCount(); });
@@ -445,7 +598,10 @@ function parseCsv(text) {
 sendBtn.onclick = async () => {
   const emails = [...guestRows.querySelectorAll('input[type=checkbox]:checked')].map(cb => cb.dataset.email);
   if (!emails.length) return;
-  if (!confirm(`Generate personalized emails and send to ${emails.length} guest(s)? This will actually send real emails.`)) return;
+  const templateId = document.getElementById('templateSelect').value;
+  if (!templateId) { showToast('Add a template first (Templates tab)', true); return; }
+  const templateName = templates.find(t => t.id === templateId)?.name || 'the selected template';
+  if (!confirm(`Send "${templateName}" to ${emails.length} guest(s)? This will actually send real emails.`)) return;
 
   sendBtn.disabled = true;
   const originalText = sendBtn.textContent;
@@ -456,12 +612,12 @@ sendBtn.onclick = async () => {
   for (const email of emails) {
     const guest = guests.find(g => g.email === email);
     const el = document.getElementById('status-' + cssId(email));
-    if (el) { el.className = 'status generating'; el.textContent = 'Writing & sending...'; }
+    if (el) { el.className = 'status generating'; el.textContent = 'Sending...'; }
 
     try {
       const res = await fetch('/api/process-one', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email, templateId })
       });
       const result = await res.json();
 
