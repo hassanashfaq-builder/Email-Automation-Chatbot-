@@ -133,6 +133,19 @@ app.delete('/api/guests/:email', async (req, res) => {
   res.json(guests);
 });
 
+// Bulk delete — either a specific set of emails, or every guest when `all` is set.
+app.post('/api/guests/delete-bulk', async (req, res) => {
+  const { emails, all } = req.body;
+  if (all) {
+    await saveGuests([]);
+    return res.json([]);
+  }
+  const toRemove = new Set((emails || []).map(e => e.toLowerCase()));
+  const guests = (await loadGuests()).filter(g => !toRemove.has(g.email.toLowerCase()));
+  await saveGuests(guests);
+  res.json(guests);
+});
+
 app.get('/api/templates', async (req, res) => res.json(await loadTemplates()));
 
 app.post('/api/templates', async (req, res) => {
