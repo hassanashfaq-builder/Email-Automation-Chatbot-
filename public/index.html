@@ -178,17 +178,28 @@
 
   /* ---- send progress modal ---- */
   .send-modal { max-width: 420px; text-align: center; }
+  #sendProgressView { position: relative; }
+  .send-modal-minimize-btn { position: absolute; top: -6px; right: -6px; background: none; border: none; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 6px; display: flex; }
+  .send-modal-minimize-btn:hover { background: #23262e; color: var(--text); }
   .send-spinner-lg { width: 42px; height: 42px; border: 4px solid rgba(13,148,136,0.15); border-top-color: var(--accent); border-radius: 50%; margin: 4px auto 0; animation: spin 0.8s linear infinite; }
   .send-modal h3 { margin: 16px 0 4px; font-size: 15px; }
   .send-progress-count { font-size: 22px; font-weight: 700; margin: 10px 0 14px; }
   .progress-track { background: #0d0f13; border: 1px solid var(--border); border-radius: 20px; height: 8px; overflow: hidden; margin-bottom: 10px; }
   .progress-fill { height: 100%; background: var(--accent); border-radius: 20px; transition: width 0.25s ease; width: 0%; }
+  #sendModalCancelBtn { width: 100%; justify-content: center; margin-top: 14px; }
   .send-result-icon { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto; background: rgba(62,207,142,0.15); color: var(--green); }
   .send-result-grid { display: flex; gap: 10px; justify-content: center; margin-top: 4px; }
   .send-result-item { flex: 1; background: #14161c; border: 1px solid var(--border); border-radius: 10px; padding: 14px 8px; }
   .send-result-num { font-size: 24px; font-weight: 700; }
   .send-result-label { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
   #sendModalCloseBtn { width: 100%; justify-content: center; margin-top: 18px; }
+
+  /* ---- minimized send progress indicator ---- */
+  .send-mini-indicator { display: none; position: fixed; bottom: 22px; right: 22px; background: var(--card); border: 1px solid var(--border); border-radius: 30px; padding: 10px 18px 10px 14px; align-items: center; gap: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.45); cursor: pointer; z-index: 50; font-size: 13px; font-weight: 500; color: var(--text); }
+  .send-mini-indicator:hover { border-color: var(--accent); }
+  .send-mini-indicator.show { display: flex; }
+  .send-mini-spinner { width: 16px; height: 16px; border: 3px solid rgba(13,148,136,0.15); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+  .send-mini-indicator.done .send-mini-spinner { animation: none; border-color: var(--green); border-top-color: var(--green); }
 
   /* ---- kebab menu ---- */
   .actions-cell { position: relative; display: flex; align-items: center; gap: 8px; }
@@ -517,10 +528,14 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
 <div class="modal-backdrop" id="sendModalBackdrop">
   <div class="modal send-modal">
     <div id="sendProgressView">
+      <button class="send-modal-minimize-btn" id="sendModalMinimizeBtn" title="Minimize" aria-label="Minimize">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
       <div class="send-spinner-lg"></div>
       <h3>Sending invitations…</h3>
       <div class="send-progress-count" id="sendProgressCount">0 / 0</div>
       <div class="progress-track"><div class="progress-fill" id="sendProgressFill"></div></div>
+      <button class="secondary" id="sendModalCancelBtn">Cancel</button>
     </div>
     <div id="sendResultView" style="display:none">
       <div class="send-result-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
@@ -538,6 +553,11 @@ Jane Smith | jane@example.com | Professor of international law at Oxford, author
       <button id="sendModalCloseBtn">Close</button>
     </div>
   </div>
+</div>
+
+<div class="send-mini-indicator" id="sendMiniIndicator" title="Click to reopen">
+  <div class="send-mini-spinner"></div>
+  <span id="sendMiniText">0 / 0 sent</span>
 </div>
 
 <div class="toast-container" id="toastContainer"></div>
@@ -1479,17 +1499,47 @@ function parseCsv(text) {
 // Progress is shown in a modal (rather than just the button label) so it
 // can't be missed, and so the button being covered by the modal backdrop
 // makes it impossible to double-submit mid-send.
+// Sending runs as a plain async loop independent of the modal's visibility,
+// so minimizing (hiding the backdrop) never pauses or restarts it — the loop
+// just keeps awaiting sendOneGuest() calls in the background either way.
+let sendCancelled = false;
+let sendMinimized = false;
+
 function openSendModal(total) {
+  sendCancelled = false;
+  sendMinimized = false;
+  const cancelBtn = document.getElementById('sendModalCancelBtn');
+  cancelBtn.disabled = false;
+  cancelBtn.textContent = 'Cancel';
   document.getElementById('sendProgressView').style.display = 'block';
   document.getElementById('sendResultView').style.display = 'none';
   document.getElementById('sendProgressFill').style.width = '0%';
   document.getElementById('sendProgressCount').textContent = `0 / ${total}`;
+  document.getElementById('sendMiniIndicator').classList.remove('show', 'done');
+  updateSendMiniText(0, total);
   document.getElementById('sendModalBackdrop').style.display = 'flex';
 }
 
 function updateSendModalProgress(done, total) {
   document.getElementById('sendProgressCount').textContent = `${done} / ${total}`;
   document.getElementById('sendProgressFill').style.width = `${Math.round((done / total) * 100)}%`;
+  updateSendMiniText(done, total);
+}
+
+function updateSendMiniText(done, total) {
+  document.getElementById('sendMiniText').textContent = `${done} / ${total} sent`;
+}
+
+function minimizeSendModal() {
+  sendMinimized = true;
+  document.getElementById('sendModalBackdrop').style.display = 'none';
+  document.getElementById('sendMiniIndicator').classList.add('show');
+}
+
+function restoreSendModal() {
+  sendMinimized = false;
+  document.getElementById('sendMiniIndicator').classList.remove('show');
+  document.getElementById('sendModalBackdrop').style.display = 'flex';
 }
 
 function showSendModalResult(sentCount, failedCount) {
@@ -1497,10 +1547,27 @@ function showSendModalResult(sentCount, failedCount) {
   document.getElementById('sendResultView').style.display = 'block';
   document.getElementById('resultSentNum').textContent = sentCount;
   document.getElementById('resultFailedNum').textContent = failedCount;
+  if (sendMinimized) {
+    const suffix = sendCancelled ? ' • cancelled' : '';
+    document.getElementById('sendMiniText').textContent = `Done — ${sentCount} sent, ${failedCount} failed${suffix}`;
+    document.getElementById('sendMiniIndicator').classList.add('done');
+  } else {
+    document.getElementById('sendModalBackdrop').style.display = 'flex';
+  }
 }
+
+document.getElementById('sendModalMinimizeBtn').onclick = minimizeSendModal;
+document.getElementById('sendMiniIndicator').onclick = restoreSendModal;
+
+document.getElementById('sendModalCancelBtn').onclick = (e) => {
+  sendCancelled = true;
+  e.currentTarget.disabled = true;
+  e.currentTarget.textContent = 'Cancelling…';
+};
 
 document.getElementById('sendModalCloseBtn').onclick = () => {
   document.getElementById('sendModalBackdrop').style.display = 'none';
+  document.getElementById('sendMiniIndicator').classList.remove('show', 'done');
 };
 
 sendBtn.onclick = async () => {
@@ -1512,14 +1579,17 @@ sendBtn.onclick = async () => {
   if (!confirm(`Send "${templateName}" to ${emails.length} guest(s)? This will actually send real emails.`)) return;
 
   openSendModal(emails.length);
-  let sentCount = 0, failedCount = 0;
+  let sentCount = 0, failedCount = 0, attempted = 0;
 
   for (let i = 0; i < emails.length; i++) {
+    if (sendCancelled) break;
     const email = emails[i];
     const result = await sendOneGuest(email, templateId);
     if (result.ok) sentCount++; else failedCount++;
-    updateSendModalProgress(i + 1, emails.length);
+    attempted++;
+    updateSendModalProgress(attempted, emails.length);
 
+    if (sendCancelled) break;
     if (i < emails.length - 1) await new Promise(r => setTimeout(r, 3500)); // throttle between guests
   }
 
