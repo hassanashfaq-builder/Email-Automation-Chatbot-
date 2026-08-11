@@ -176,7 +176,18 @@ async function sendMailWithRetry(transporter, mail, attempts = 2) {
 // ---- auth ----
 
 function publicUser(user) {
-  return { id: user.id, name: user.name, email: user.email, mailerType: user.mailerType };
+  // The shared mailer account is only offered to the one identity it
+  // actually belongs to — presetFromEmail is only included at all when this
+  // user is that identity, so the address isn't exposed to anyone else.
+  const canUsePreset = user.email === (presetConfig.auth.user || '').toLowerCase();
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    mailerType: user.mailerType,
+    canUsePreset,
+    presetFromEmail: canUsePreset ? presetConfig.auth.user : null,
+  };
 }
 
 app.post('/api/auth/signup', async (req, res) => {
@@ -252,10 +263,6 @@ app.get('/api/auth/me', async (req, res) => {
       authenticated: true,
       ...publicUser(user),
       fromEmail: resolveMailerConfig(user).auth.user,
-      // Always the real shared account, regardless of what this user
-      // currently has selected — used to label the "use shared account"
-      // choice correctly even when reopened later from Settings.
-      presetFromEmail: presetConfig.auth.user,
     });
   } catch (_) {
     res.json({ authenticated: false });
@@ -263,6 +270,12 @@ app.get('/api/auth/me', async (req, res) => {
 });
 
 app.post('/api/auth/mailer/preset', authRequired, async (req, res) => {
+  // Enforced here, not just hidden in the UI — the shared account is only
+  // for the one identity it actually belongs to.
+  const user = await findUserById(req.userId);
+  if (!user || user.email !== (presetConfig.auth.user || '').toLowerCase()) {
+    return res.status(403).json({ error: 'The shared account is not available for this login' });
+  }
   await updateUser(req.userId, { mailerType: 'preset' });
   res.json({ ok: true, mailerType: 'preset' });
 });
