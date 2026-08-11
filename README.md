@@ -27,7 +27,15 @@ while you use it.
 5. Already-sent guests are marked ✓ Sent and unchecked automatically so you
    won't accidentally double-send.
 6. The Email Stats tab shows delivered / opened / not-delivered counts, each
-   expandable to the guest list behind it.
+   expandable to the guest list behind it. Click "Sync now" to also check the
+   sending mailbox for bounce notifications — a hard bounce from the
+   recipient's side (e.g. their server rejecting the mailbox) arrives
+   asynchronously, sometimes hours after the send looked successful, so this
+   is what moves a guest from "delivered" to "failed" once the real outcome
+   is known. Uses the same mailbox login as sending (IMAP), so no extra setup
+   beyond what's already in config.json — override with imapHost/imapPort/
+   imapSecure (or IMAP_HOST/IMAP_PORT/IMAP_SECURE) only if bounces should be
+   read from a different mailbox/host than SMTP.
 
 ## Files
 - config.json        SMTP credentials (keep this private, not committed)

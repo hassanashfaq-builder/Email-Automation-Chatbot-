@@ -8,5 +8,8 @@
   },
   "fromName": "Your Name - Podcast",
   "baseUrl": "http://localhost:3344",
-  "enableOpenTracking": false
+  "enableOpenTracking": false,
+  "imapHost": "mail.example.com",
+  "imapPort": 993,
+  "imapSecure": true
 }

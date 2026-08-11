@@ -6,11 +6,22 @@ const crypto = require('crypto');
 const dns = require('dns');
 const { loadGuests, saveGuests, loadTemplates, saveTemplates } = require('./lib/db');
 const { fillTemplate } = require('./lib/templates');
+const { findBounces } = require('./lib/bounces');
 
 function loadConfig() {
   const configPath = path.join(__dirname, 'config.json');
   if (fs.existsSync(configPath)) {
-    return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    // IMAP is only used to read bounce notifications back out of the same
+    // mailbox that sends — cPanel-style hosts almost always run both on the
+    // same hostname, just different ports, so default there instead of
+    // requiring a second host to be configured.
+    return {
+      ...parsed,
+      imapHost: parsed.imapHost || parsed.host,
+      imapPort: parsed.imapPort || 993,
+      imapSecure: parsed.imapSecure !== false,
+    };
   }
   // no config.json in this environment (e.g. Render) — build from env vars instead
   return {
@@ -21,6 +32,9 @@ function loadConfig() {
     fromName: process.env.FROM_NAME,
     baseUrl: process.env.BASE_URL || 'http://localhost:3344',
     enableOpenTracking: process.env.ENABLE_OPEN_TRACKING === 'true',
+    imapHost: process.env.IMAP_HOST || process.env.SMTP_HOST,
+    imapPort: parseInt(process.env.IMAP_PORT || '993', 10),
+    imapSecure: process.env.IMAP_SECURE !== 'false',
   };
 }
 const config = loadConfig();
@@ -304,6 +318,47 @@ app.get('/api/stats', async (req, res) => {
     replied: [],
     notDelivered,
   });
+});
+
+// Reads bounce (DSN) notifications out of the sending mailbox's INBOX and
+// reclassifies any matching guest as failed. This is the only way to catch a
+// hard bounce that happens after the SMTP transaction already succeeded —
+// e.g. the receiving provider accepts the relay, then rejects the mailbox
+// itself and emails the bounce back to us asynchronously, sometimes hours
+// later. Guests already marked failed are left alone (idempotent re-checks).
+app.post('/api/check-bounces', async (req, res) => {
+  try {
+    const guests = await loadGuests();
+    const sentDates = guests.map(g => g.sentAt && new Date(g.sentAt).getTime()).filter(n => n && !Number.isNaN(n));
+    const since = sentDates.length ? new Date(Math.min(...sentDates)) : undefined;
+
+    const bounces = await findBounces({
+      host: config.imapHost,
+      port: config.imapPort,
+      secure: config.imapSecure,
+      user: config.auth.user,
+      pass: config.auth.pass,
+      since,
+    });
+
+    if (!bounces.length) return res.json({ ok: true, checked: 0, matched: 0 });
+
+    let matched = 0;
+    for (const bounce of bounces) {
+      const idx = guests.findIndex(g => g.email.toLowerCase() === bounce.email && !g.failed);
+      if (idx === -1) continue;
+      guests[idx].sent = false;
+      guests[idx].failed = true;
+      guests[idx].failedAt = new Date().toISOString();
+      guests[idx].error = bounce.reason;
+      matched++;
+    }
+    if (matched) await saveGuests(guests);
+
+    res.json({ ok: true, checked: bounces.length, matched });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // Generate + send for a single guest. One guest per request (rather than one

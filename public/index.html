@@ -1000,8 +1000,21 @@ document.addEventListener('click', (e) => {
 
 document.getElementById('syncStatsBtn').onclick = async () => {
   await withButtonLoading(document.getElementById('syncStatsBtn'), 'Syncing...', async () => {
+    // Checks the sending mailbox for bounce notifications first — a hard
+    // bounce from the recipient's side arrives asynchronously, sometimes
+    // hours after the original send looked successful, so "Sync" is what
+    // actually reclassifies those guests as failed instead of "delivered".
+    let bounceMsg = '';
+    try {
+      const res = await fetch('/api/check-bounces', { method: 'POST' });
+      const result = await res.json();
+      if (result.matched) bounceMsg = ` — ${result.matched} bounce(s) moved to Failed`;
+    } catch (_) {
+      // IMAP not configured or unreachable — fall back to a plain stats sync
+    }
+    await loadGuests();
     await loadAnalytics();
-    showToast('Synced');
+    showToast('Synced' + bounceMsg);
   });
 };
 
