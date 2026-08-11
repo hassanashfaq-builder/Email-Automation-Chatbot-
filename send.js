@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
@@ -51,11 +52,18 @@ async function main() {
     }
 
     try {
+      const senderDomain = config.auth.user.split('@')[1];
       await transporter.sendMail({
         from: `"${config.fromName}" <${config.auth.user}>`,
         to: guest.email,
+        replyTo: config.auth.user,
         subject: config.subject,
         text: guest.body,
+        messageId: `<${crypto.randomUUID()}@${senderDomain}>`,
+        headers: {
+          'List-Unsubscribe': `<mailto:${config.auth.user}?subject=unsubscribe>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
       });
       console.log(`✓ Sent to ${guest.name} <${guest.email}>`);
       sent++;

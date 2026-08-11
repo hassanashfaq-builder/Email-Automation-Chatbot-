@@ -375,12 +375,25 @@ app.post('/api/process-one', async (req, res) => {
       ? `<img src="${baseUrl}/api/e/${guest.id}.png" width="1" height="1" alt="">`
       : '';
     const html = textToHtml(body) + trackingPixel;
+    // Message-ID/List-Unsubscribe/Reply-To are set explicitly because the sending
+    // host (mail.kianistan.com, a cPanel-style server) runs outbound SpamAssassin
+    // scoring and rejects the SMTP transaction itself — same "550 classified as
+    // SPAM" text regardless of recipient domain — when these are missing/generic.
+    // nodemailer's default Message-ID uses the local machine/container hostname,
+    // which doesn't match the sending domain and scores as suspicious.
+    const senderDomain = config.auth.user.split('@')[1];
     await sendMailWithRetry(transporter, {
       from: `"${config.fromName}" <${config.auth.user}>`,
       to: guest.email,
+      replyTo: config.auth.user,
       subject,
       text: body,
       html,
+      messageId: `<${crypto.randomUUID()}@${senderDomain}>`,
+      headers: {
+        'List-Unsubscribe': `<mailto:${config.auth.user}?subject=unsubscribe>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
     });
 
     const all2 = await loadGuests();
