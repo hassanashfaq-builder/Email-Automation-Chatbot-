@@ -68,14 +68,14 @@ const openTrackingEnabled = !onSharedVercelDomain && (presetConfig.enableOpenTra
 // signal already used above for the vercel.app tracking-pixel guard.
 const cookieSecure = !baseUrl.includes('localhost');
 
-// Who's allowed to create an account at all — the admin (whoever controls
-// the deployment's env vars) grants access to teammates by adding their
-// email here. Defaults to just the pre-existing preset account's email, so
-// a fresh deployment always has at least one usable account without extra
-// config, and that email signing up is what claims any pre-existing
-// (per-owner-unscoped) guest/template data — see /api/auth/signup below.
-const ALLOWED_SIGNUP_EMAILS = (process.env.ALLOWED_SIGNUP_EMAILS || presetConfig.auth.user || '')
-  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+// Signup is open to anyone by default — each person brings their own
+// verified SMTP/IMAP mailer. Set ALLOWED_SIGNUP_EMAILS (comma-separated) to
+// go invite-only instead. Either way, the one pre-existing shared mailer
+// account stays restricted to its real owner regardless of this setting —
+// see canUsePreset in publicUser() and the /api/auth/mailer/preset route.
+const ALLOWED_SIGNUP_EMAILS = process.env.ALLOWED_SIGNUP_EMAILS
+  ? process.env.ALLOWED_SIGNUP_EMAILS.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+  : null;
 
 // 1x1 transparent PNG used as the open-tracking pixel
 const TRACKING_PIXEL = Buffer.from(
@@ -198,7 +198,7 @@ app.post('/api/auth/signup', async (req, res) => {
     if (!password || password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
 
     const normalizedEmail = email.trim().toLowerCase();
-    if (!ALLOWED_SIGNUP_EMAILS.includes(normalizedEmail)) {
+    if (ALLOWED_SIGNUP_EMAILS && !ALLOWED_SIGNUP_EMAILS.includes(normalizedEmail)) {
       return res.status(403).json({ error: "This email isn't authorized to create an account — ask the admin to add it." });
     }
     if (await findUserByEmail(normalizedEmail)) {
