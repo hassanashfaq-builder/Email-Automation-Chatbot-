@@ -4,9 +4,18 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const dns = require('dns');
-const { loadGuests, saveGuests, loadTemplates, saveTemplates } = require('./lib/db');
+const {
+  loadGuests, saveGuests, loadGuestByIdUnscoped, updateGuestByIdUnscoped,
+  loadTemplates, saveTemplates,
+  findUserByEmail, findUserById, createUser, updateUser, claimUnownedData,
+} = require('./lib/db');
 const { fillTemplate } = require('./lib/templates');
 const { findBounces } = require('./lib/bounces');
+const {
+  hashPassword, verifyPassword, signSession, verifySession, readSessionCookie,
+  setSessionCookie, clearSessionCookie, authRequired,
+} = require('./lib/auth');
+const { encrypt, decrypt } = require('./lib/crypto');
 
 function loadConfig() {
   const configPath = path.join(__dirname, 'config.json');
@@ -37,8 +46,11 @@ function loadConfig() {
     imapSecure: process.env.IMAP_SECURE !== 'false',
   };
 }
-const config = loadConfig();
-const baseUrl = config.baseUrl || 'http://localhost:3344';
+// The one pre-existing, already-configured mailer account — offered to every
+// user during onboarding as the "use the shared account" option, unchanged
+// from how the whole app worked before multi-user accounts existed.
+const presetConfig = loadConfig();
+const baseUrl = presetConfig.baseUrl || 'http://localhost:3344';
 const baseUrlHost = (() => { try { return new URL(baseUrl).hostname; } catch (_) { return ''; } })();
 // *.vercel.app is Vercel's shared preview/prod domain — because it's free,
 // instant, and used by countless throwaway/phishing sites, many outbound
@@ -51,7 +63,19 @@ const baseUrlHost = (() => { try { return new URL(baseUrl).hostname; } catch (_)
 // domain (e.g. a kianistan.com subdomain) pointed at this deployment via
 // Vercel's Domains settings, with BASE_URL updated to match.
 const onSharedVercelDomain = /(^|\.)vercel\.app$/i.test(baseUrlHost);
-const openTrackingEnabled = !onSharedVercelDomain && (config.enableOpenTracking === true || config.enableOpenTracking === 'true');
+const openTrackingEnabled = !onSharedVercelDomain && (presetConfig.enableOpenTracking === true || presetConfig.enableOpenTracking === 'true');
+// Cookies only need Secure once this is actually served over https — same
+// signal already used above for the vercel.app tracking-pixel guard.
+const cookieSecure = !baseUrl.includes('localhost');
+
+// Who's allowed to create an account at all — the admin (whoever controls
+// the deployment's env vars) grants access to teammates by adding their
+// email here. Defaults to just the pre-existing preset account's email, so
+// a fresh deployment always has at least one usable account without extra
+// config, and that email signing up is what claims any pre-existing
+// (per-owner-unscoped) guest/template data — see /api/auth/signup below.
+const ALLOWED_SIGNUP_EMAILS = (process.env.ALLOWED_SIGNUP_EMAILS || presetConfig.auth.user || '')
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 
 // 1x1 transparent PNG used as the open-tracking pixel
 const TRACKING_PIXEL = Buffer.from(
@@ -99,12 +123,33 @@ async function domainHasMailServer(email) {
   return false;
 }
 
-function getTransporter() {
+// Every user sends through either the shared preset mailer or their own
+// verified SMTP/IMAP credentials — this is the one place that decides which,
+// so every route below just asks for "this user's mailer config" instead of
+// duplicating the branch.
+function resolveMailerConfig(user) {
+  if (user && user.mailerType === 'custom' && user.mailer) {
+    const m = user.mailer;
+    return {
+      host: m.host,
+      port: m.port,
+      secure: m.secure,
+      auth: { user: m.user, pass: decrypt(m.passEncrypted) },
+      fromName: m.fromName,
+      imapHost: m.imapHost || m.host,
+      imapPort: m.imapPort || 993,
+      imapSecure: m.imapSecure !== false,
+    };
+  }
+  return presetConfig;
+}
+
+function getTransporter(mailerConfig) {
   return nodemailer.createTransport({
-    host: config.host,
-    port: config.port,
-    secure: config.secure,
-    auth: config.auth,
+    host: mailerConfig.host,
+    port: mailerConfig.port,
+    secure: mailerConfig.secure,
+    auth: mailerConfig.auth,
   });
 }
 
@@ -128,18 +173,147 @@ async function sendMailWithRetry(transporter, mail, attempts = 2) {
   }
 }
 
-app.get('/api/config', (req, res) => res.json({
-  fromEmail: config.auth.user,
-  openTrackingEnabled,
-  openTrackingBlockedReason: onSharedVercelDomain ? 'BASE_URL is a *.vercel.app domain — set a custom domain to enable tracking' : null,
-}));
+// ---- auth ----
 
-app.get('/api/guests', async (req, res) => res.json(await loadGuests()));
+function publicUser(user) {
+  return { id: user.id, name: user.name, email: user.email, mailerType: user.mailerType };
+}
+
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
+    if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ error: 'A valid email is required' });
+    if (!password || password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!ALLOWED_SIGNUP_EMAILS.includes(normalizedEmail)) {
+      return res.status(403).json({ error: "This email isn't authorized to create an account — ask the admin to add it." });
+    }
+    if (await findUserByEmail(normalizedEmail)) {
+      return res.status(400).json({ error: 'An account with that email already exists' });
+    }
+
+    const user = {
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      email: normalizedEmail,
+      passwordHash: hashPassword(password),
+      mailerType: null,
+      createdAt: new Date().toISOString(),
+    };
+    await createUser(user);
+
+    // The one email that matches the pre-existing shared mailer account
+    // inherits whatever guest/template data was created before per-user
+    // accounts existed, instead of leaving it permanently orphaned. Safe
+    // because only allow-listed emails can sign up at all.
+    if (normalizedEmail === (presetConfig.auth.user || '').toLowerCase()) {
+      await claimUnownedData(user.id);
+    }
+
+    setSessionCookie(res, signSession(user.id), cookieSecure);
+    res.json(publicUser(user));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
+    const user = await findUserByEmail(email.trim().toLowerCase());
+    if (!user || !verifyPassword(password, user.passwordHash)) {
+      return res.status(401).json({ error: 'Incorrect email or password' });
+    }
+    setSessionCookie(res, signSession(user.id), cookieSecure);
+    res.json(publicUser(user));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  clearSessionCookie(res, cookieSecure);
+  res.json({ ok: true });
+});
+
+// Always 200 (never 401) — this is the boot-time check the frontend uses to
+// decide which screen to show, so it shouldn't need special-case error
+// handling for "not logged in," which is an expected, common response here.
+app.get('/api/auth/me', async (req, res) => {
+  const token = readSessionCookie(req);
+  if (!token) return res.json({ authenticated: false });
+  try {
+    const user = await findUserById(verifySession(token));
+    if (!user) return res.json({ authenticated: false });
+    res.json({
+      authenticated: true,
+      ...publicUser(user),
+      fromEmail: resolveMailerConfig(user).auth.user,
+      // Always the real shared account, regardless of what this user
+      // currently has selected — used to label the "use shared account"
+      // choice correctly even when reopened later from Settings.
+      presetFromEmail: presetConfig.auth.user,
+    });
+  } catch (_) {
+    res.json({ authenticated: false });
+  }
+});
+
+app.post('/api/auth/mailer/preset', authRequired, async (req, res) => {
+  await updateUser(req.userId, { mailerType: 'preset' });
+  res.json({ ok: true, mailerType: 'preset' });
+});
+
+app.post('/api/auth/mailer/custom', authRequired, async (req, res) => {
+  const { host, port, secure, user, pass, fromName, imapHost, imapPort, imapSecure } = req.body;
+  if (!host || !port || !user || !pass) {
+    return res.status(400).json({ error: 'Host, port, email, and password are required' });
+  }
+
+  const transporter = nodemailer.createTransport({
+    host, port: parseInt(port, 10), secure: secure !== false, auth: { user, pass },
+  });
+  try {
+    await transporter.verify();
+  } catch (err) {
+    return res.status(400).json({ error: `Could not connect: ${err.message}` });
+  }
+
+  await updateUser(req.userId, {
+    mailerType: 'custom',
+    mailer: {
+      host,
+      port: parseInt(port, 10),
+      secure: secure !== false,
+      user,
+      passEncrypted: encrypt(pass),
+      fromName: (fromName || '').trim() || user,
+      imapHost: (imapHost || '').trim() || host,
+      imapPort: imapPort ? parseInt(imapPort, 10) : 993,
+      imapSecure: imapSecure !== false,
+    },
+  });
+  res.json({ ok: true, mailerType: 'custom' });
+});
+
+app.get('/api/config', authRequired, async (req, res) => {
+  const mailerConfig = resolveMailerConfig(await findUserById(req.userId));
+  res.json({
+    fromEmail: mailerConfig.auth.user,
+    openTrackingEnabled,
+    openTrackingBlockedReason: onSharedVercelDomain ? 'BASE_URL is a *.vercel.app domain — set a custom domain to enable tracking' : null,
+  });
+});
+
+app.get('/api/guests', authRequired, async (req, res) => res.json(await loadGuests(req.userId)));
 
 // Import guests (from paste or CSV upload). Merges by email — updates existing, adds new.
-app.post('/api/guests/import', async (req, res) => {
+app.post('/api/guests/import', authRequired, async (req, res) => {
   const incoming = req.body.guests || [];
-  const existing = await loadGuests();
+  const existing = await loadGuests(req.userId);
   const byEmail = new Map(existing.map(g => [g.email.toLowerCase(), g]));
 
   for (const g of incoming) {
@@ -166,17 +340,17 @@ app.post('/api/guests/import', async (req, res) => {
   }
 
   const merged = [...byEmail.values()];
-  await saveGuests(merged);
+  await saveGuests(req.userId, merged);
   res.json(merged);
 });
 
 // Edit a guest's name/email/background by id (rather than by email, since
 // email itself — the merge key used elsewhere — may be what's being changed).
-app.put('/api/guests/:id', async (req, res) => {
+app.put('/api/guests/:id', authRequired, async (req, res) => {
   const { name, email, background } = req.body;
   if (!email || !email.trim()) return res.status(400).json({ error: 'Email is required' });
 
-  const guests = await loadGuests();
+  const guests = await loadGuests(req.userId);
   const idx = guests.findIndex(g => g.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Guest not found' });
 
@@ -187,37 +361,37 @@ app.put('/api/guests/:id', async (req, res) => {
   guests[idx].email = newEmail;
   guests[idx].name = (name || '').trim() || newEmail.split('@')[0];
   guests[idx].background = (background || '').trim();
-  await saveGuests(guests);
+  await saveGuests(req.userId, guests);
   res.json(guests[idx]);
 });
 
-app.delete('/api/guests/:email', async (req, res) => {
-  const guests = (await loadGuests()).filter(g => g.email.toLowerCase() !== req.params.email.toLowerCase());
-  await saveGuests(guests);
+app.delete('/api/guests/:email', authRequired, async (req, res) => {
+  const guests = (await loadGuests(req.userId)).filter(g => g.email.toLowerCase() !== req.params.email.toLowerCase());
+  await saveGuests(req.userId, guests);
   res.json(guests);
 });
 
 // Bulk delete — either a specific set of emails, or every guest when `all` is set.
-app.post('/api/guests/delete-bulk', async (req, res) => {
+app.post('/api/guests/delete-bulk', authRequired, async (req, res) => {
   const { emails, all } = req.body;
   if (all) {
-    await saveGuests([]);
+    await saveGuests(req.userId, []);
     return res.json([]);
   }
   const toRemove = new Set((emails || []).map(e => e.toLowerCase()));
-  const guests = (await loadGuests()).filter(g => !toRemove.has(g.email.toLowerCase()));
-  await saveGuests(guests);
+  const guests = (await loadGuests(req.userId)).filter(g => !toRemove.has(g.email.toLowerCase()));
+  await saveGuests(req.userId, guests);
   res.json(guests);
 });
 
-app.get('/api/templates', async (req, res) => res.json(await loadTemplates()));
+app.get('/api/templates', authRequired, async (req, res) => res.json(await loadTemplates(req.userId)));
 
-app.post('/api/templates', async (req, res) => {
+app.post('/api/templates', authRequired, async (req, res) => {
   const { name, subject, body } = req.body;
   if (!name || !subject || !body) {
     return res.status(400).json({ error: 'name, subject, and body are all required' });
   }
-  const templates = await loadTemplates();
+  const templates = await loadTemplates(req.userId);
   const template = {
     id: crypto.randomUUID(),
     name: name.trim(),
@@ -226,13 +400,13 @@ app.post('/api/templates', async (req, res) => {
     createdAt: new Date().toISOString(),
   };
   templates.push(template);
-  await saveTemplates(templates);
+  await saveTemplates(req.userId, templates);
   res.json(template);
 });
 
-app.put('/api/templates/:id', async (req, res) => {
+app.put('/api/templates/:id', authRequired, async (req, res) => {
   const { name, subject, body } = req.body;
-  const templates = await loadTemplates();
+  const templates = await loadTemplates(req.userId);
   const idx = templates.findIndex(t => t.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Template not found' });
   templates[idx] = {
@@ -242,35 +416,36 @@ app.put('/api/templates/:id', async (req, res) => {
     body: body ?? templates[idx].body,
     updatedAt: new Date().toISOString(),
   };
-  await saveTemplates(templates);
+  await saveTemplates(req.userId, templates);
   res.json(templates[idx]);
 });
 
-app.delete('/api/templates/:id', async (req, res) => {
-  const templates = (await loadTemplates()).filter(t => t.id !== req.params.id);
-  await saveTemplates(templates);
+app.delete('/api/templates/:id', authRequired, async (req, res) => {
+  const templates = (await loadTemplates(req.userId)).filter(t => t.id !== req.params.id);
+  await saveTemplates(req.userId, templates);
   res.json(templates);
 });
 
 // Open-tracking pixel — embedded 1x1 image in each sent email. Served at
 // /api/e/ (not /api/track/) because some spam filters keyword-scan URLs for
 // "track"/"pixel"/"beacon"; /api/track/ is kept as an alias so pixels already
-// out in previously-sent emails keep working.
+// out in previously-sent emails keep working. Hit anonymously by the
+// recipient's mail client — no session/owner here, only the guest's
+// already-globally-unique id, so this uses the unscoped lookup helpers.
 async function servePixel(req, res) {
   res.setHeader('Content-Type', 'image/png');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.end(TRACKING_PIXEL);
 
   try {
-    const guests = await loadGuests();
-    const idx = guests.findIndex(g => g.id === req.params.id);
-    if (idx !== -1) {
-      if (!guests[idx].opened) {
-        guests[idx].opened = true;
-        guests[idx].openedAt = new Date().toISOString();
+    const guest = await loadGuestByIdUnscoped(req.params.id);
+    if (guest) {
+      const patch = { openCount: (guest.openCount || 0) + 1 };
+      if (!guest.opened) {
+        patch.opened = true;
+        patch.openedAt = new Date().toISOString();
       }
-      guests[idx].openCount = (guests[idx].openCount || 0) + 1;
-      await saveGuests(guests);
+      await updateGuestByIdUnscoped(req.params.id, patch);
     }
   } catch (err) {
     console.error('Failed to record open:', err.message);
@@ -294,8 +469,8 @@ function deliveryState(g) {
   return age >= DELIVERED_GRACE_MS ? 'delivered' : 'sent';
 }
 
-app.get('/api/stats', async (req, res) => {
-  const guests = await loadGuests();
+app.get('/api/stats', authRequired, async (req, res) => {
+  const guests = await loadGuests(req.userId);
   const pick = (g) => ({ name: g.name, email: g.email });
 
   const sent = guests.filter(g => g.sent).map(g => ({ ...pick(g), sentAt: g.sentAt }));
@@ -326,18 +501,19 @@ app.get('/api/stats', async (req, res) => {
 // e.g. the receiving provider accepts the relay, then rejects the mailbox
 // itself and emails the bounce back to us asynchronously, sometimes hours
 // later. Guests already marked failed are left alone (idempotent re-checks).
-app.post('/api/check-bounces', async (req, res) => {
+app.post('/api/check-bounces', authRequired, async (req, res) => {
   try {
-    const guests = await loadGuests();
+    const mailerConfig = resolveMailerConfig(await findUserById(req.userId));
+    const guests = await loadGuests(req.userId);
     const sentDates = guests.map(g => g.sentAt && new Date(g.sentAt).getTime()).filter(n => n && !Number.isNaN(n));
     const since = sentDates.length ? new Date(Math.min(...sentDates)) : undefined;
 
     const bounces = await findBounces({
-      host: config.imapHost,
-      port: config.imapPort,
-      secure: config.imapSecure,
-      user: config.auth.user,
-      pass: config.auth.pass,
+      host: mailerConfig.imapHost,
+      port: mailerConfig.imapPort,
+      secure: mailerConfig.imapSecure,
+      user: mailerConfig.auth.user,
+      pass: mailerConfig.auth.pass,
       since,
     });
 
@@ -353,7 +529,7 @@ app.post('/api/check-bounces', async (req, res) => {
       guests[idx].error = bounce.reason;
       matched++;
     }
-    if (matched) await saveGuests(guests);
+    if (matched) await saveGuests(req.userId, guests);
 
     res.json({ ok: true, checked: bounces.length, matched });
   } catch (err) {
@@ -365,18 +541,20 @@ app.post('/api/check-bounces', async (req, res) => {
 // long-lived SSE stream for the whole batch) so each call finishes well
 // within a serverless function's execution time limit — the client drives
 // the batch by calling this once per selected guest.
-app.post('/api/process-one', async (req, res) => {
+app.post('/api/process-one', authRequired, async (req, res) => {
   const { email, templateId } = req.body;
-  const guests = await loadGuests();
+  const mailerConfig = resolveMailerConfig(await findUserById(req.userId));
+
+  const guests = await loadGuests(req.userId);
   const guest = guests.find(g => g.email === email);
   if (!guest) return res.status(404).json({ ok: false, error: 'Guest not found' });
 
-  const templates = await loadTemplates();
+  const templates = await loadTemplates(req.userId);
   const template = templates.find(t => t.id === templateId);
   if (!template) return res.status(400).json({ ok: false, error: 'Template not found' });
 
   const fail = async (message) => {
-    const all = await loadGuests();
+    const all = await loadGuests(req.userId);
     const idx = all.findIndex(g => g.email === email);
     if (idx !== -1) {
       all[idx].sent = false;
@@ -388,7 +566,7 @@ app.post('/api/process-one', async (req, res) => {
       // the Analytics template filter would silently drop them from every list
       all[idx].templateId = template.id;
       all[idx].templateName = template.name;
-      await saveGuests(all);
+      await saveGuests(req.userId, all);
     }
     return res.json({ ok: false, error: message });
   };
@@ -397,9 +575,9 @@ app.post('/api/process-one', async (req, res) => {
     // guests created before tracking support may not have an id yet
     if (!guest.id) {
       guest.id = crypto.randomUUID();
-      const withId = await loadGuests();
+      const withId = await loadGuests(req.userId);
       const i = withId.findIndex(g => g.email === email);
-      if (i !== -1) { withId[i].id = guest.id; await saveGuests(withId); }
+      if (i !== -1) { withId[i].id = guest.id; await saveGuests(req.userId, withId); }
     }
 
     if (!EMAIL_RE.test(guest.email)) {
@@ -409,7 +587,7 @@ app.post('/api/process-one', async (req, res) => {
       return fail(`"${guest.email.split('@')[1]}" has no mail server (MX/A record) — address can't receive email`);
     }
 
-    const transporter = getTransporter();
+    const transporter = getTransporter(mailerConfig);
     try {
       await transporter.verify();
     } catch (err) {
@@ -419,9 +597,9 @@ app.post('/api/process-one', async (req, res) => {
     const subject = fillTemplate(template.subject, guest);
     const body = fillTemplate(template.body, guest);
 
-    const withBody = await loadGuests();
+    const withBody = await loadGuests(req.userId);
     const bodyIdx = withBody.findIndex(g => g.email === email);
-    if (bodyIdx !== -1) { withBody[bodyIdx].body = body; await saveGuests(withBody); }
+    if (bodyIdx !== -1) { withBody[bodyIdx].body = body; await saveGuests(req.userId, withBody); }
 
     // No style="display:none" — an explicitly hidden element is a stronger
     // spam-filter signal than a merely 1x1 image (which is invisible anyway
@@ -430,28 +608,29 @@ app.post('/api/process-one', async (req, res) => {
       ? `<img src="${baseUrl}/api/e/${guest.id}.png" width="1" height="1" alt="">`
       : '';
     const html = textToHtml(body) + trackingPixel;
-    // Message-ID/List-Unsubscribe/Reply-To are set explicitly because the sending
-    // host (mail.kianistan.com, a cPanel-style server) runs outbound SpamAssassin
-    // scoring and rejects the SMTP transaction itself — same "550 classified as
-    // SPAM" text regardless of recipient domain — when these are missing/generic.
-    // nodemailer's default Message-ID uses the local machine/container hostname,
-    // which doesn't match the sending domain and scores as suspicious.
-    const senderDomain = config.auth.user.split('@')[1];
+    // Message-ID/List-Unsubscribe/Reply-To are set explicitly because a
+    // cPanel-style sending host commonly runs outbound SpamAssassin scoring
+    // and rejects the SMTP transaction itself — same "550 classified as
+    // SPAM" text regardless of recipient domain — when these are
+    // missing/generic. nodemailer's default Message-ID uses the local
+    // machine/container hostname, which doesn't match the sending domain
+    // and scores as suspicious.
+    const senderDomain = mailerConfig.auth.user.split('@')[1];
     await sendMailWithRetry(transporter, {
-      from: `"${config.fromName}" <${config.auth.user}>`,
+      from: `"${mailerConfig.fromName}" <${mailerConfig.auth.user}>`,
       to: guest.email,
-      replyTo: config.auth.user,
+      replyTo: mailerConfig.auth.user,
       subject,
       text: body,
       html,
       messageId: `<${crypto.randomUUID()}@${senderDomain}>`,
       headers: {
-        'List-Unsubscribe': `<mailto:${config.auth.user}?subject=unsubscribe>`,
+        'List-Unsubscribe': `<mailto:${mailerConfig.auth.user}?subject=unsubscribe>`,
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
       },
     });
 
-    const all2 = await loadGuests();
+    const all2 = await loadGuests(req.userId);
     const idx2 = all2.findIndex(g => g.email === email);
     if (idx2 !== -1) {
       all2[idx2].sent = true;
@@ -460,7 +639,7 @@ app.post('/api/process-one', async (req, res) => {
       all2[idx2].error = null;
       all2[idx2].templateId = template.id;
       all2[idx2].templateName = template.name;
-      await saveGuests(all2);
+      await saveGuests(req.userId, all2);
     }
 
     res.json({ ok: true });

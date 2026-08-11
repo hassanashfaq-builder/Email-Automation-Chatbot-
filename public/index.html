@@ -216,11 +216,118 @@
   .page-btns { display: flex; align-items: center; gap: 4px; }
   .page-btns button { min-width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; }
   .page-btns button.page-num.active { background: var(--accent); }
+
+  /* ---- onboarding (accounts + mailer connection) ---- */
+  #onboardingView { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 24px; }
+  .onboarding-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 32px; width: 100%; max-width: 420px; text-align: center; }
+  .onboarding-card h1 { font-size: 19px; margin: 0; }
+  .onboarding-card > p.tagline { color: var(--muted); font-size: 13px; margin: 4px 0 26px; }
+  .onboarding-card h3 { font-size: 15px; margin: 0 0 4px; text-align: left; }
+  .onboarding-card .field { text-align: left; }
+  .onboarding-error { color: var(--red); font-size: 12.5px; margin: 4px 0 8px; text-align: left; }
+  .onboarding-switch { text-align: center; font-size: 13px; color: var(--muted); margin-top: 16px; }
+  .onboarding-switch a { color: var(--accent); cursor: pointer; }
+  .mailer-choice { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; text-align: left; }
+  .mailer-choice:hover { border-color: var(--accent); background: #171b26; }
+  .mailer-choice-title { font-weight: 600; font-size: 13.5px; }
+  .mailer-choice-sub { font-size: 12px; color: var(--muted); margin-top: 3px; word-break: break-word; }
+  .imap-advanced-toggle { display: inline-block; font-size: 12.5px; color: var(--accent); cursor: pointer; margin-top: 4px; }
 </style>
 </head>
 <body>
 
-<div class="topbar">
+<div id="onboardingView" style="display:none">
+  <div class="onboarding-card">
+    <h1>DevLyncs - Invitation Mailer</h1>
+    <p class="tagline">Send personalized emails to anyone with us</p>
+
+    <div id="onboardingStep1">
+      <h3 id="authTitle">Create your account</h3>
+      <div class="field" id="authNameField">
+        <label for="authNameInput">Name</label>
+        <input type="text" id="authNameInput" placeholder="Your name">
+      </div>
+      <div class="field">
+        <label for="authEmailInput">Email</label>
+        <input type="text" id="authEmailInput" placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <label for="authPasswordInput">Password</label>
+        <input type="password" id="authPasswordInput" placeholder="At least 8 characters">
+      </div>
+      <div class="onboarding-error" id="authError" style="display:none"></div>
+      <button id="authContinueBtn" style="width:100%;justify-content:center;margin-top:6px">Continue</button>
+      <p class="onboarding-switch"><span id="authSwitchText">Already have an account?</span> <a id="authSwitchLink">Log in</a></p>
+    </div>
+
+    <div id="onboardingStep2" style="display:none">
+      <h3>Connect an email account</h3>
+      <p style="color:var(--muted);font-size:13px;margin:0 0 16px;text-align:left">Choose how invitations get sent for your account.</p>
+
+      <div class="mailer-choice" id="usePresetChoice">
+        <div class="mailer-choice-title">Use the shared podcast account</div>
+        <div class="mailer-choice-sub" id="presetAccountLabel">—</div>
+      </div>
+      <div class="mailer-choice" id="useCustomChoice">
+        <div class="mailer-choice-title">Connect your own email account</div>
+        <div class="mailer-choice-sub">SMTP + IMAP, verified before it's saved</div>
+      </div>
+
+      <div id="customMailerForm" style="display:none;margin-top:6px">
+        <div class="field">
+          <label for="mailerHostInput">SMTP host</label>
+          <input type="text" id="mailerHostInput" placeholder="mail.example.com">
+        </div>
+        <div class="row">
+          <div class="field" style="flex:1">
+            <label for="mailerPortInput">Port</label>
+            <input type="text" id="mailerPortInput" placeholder="465" value="465">
+          </div>
+          <div class="field" style="flex:1">
+            <label for="mailerSecureInput">Secure (TLS)</label>
+            <select id="mailerSecureInput"><option value="true">Yes</option><option value="false">No</option></select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="mailerUserInput">Email address</label>
+          <input type="text" id="mailerUserInput" placeholder="you@example.com">
+        </div>
+        <div class="field">
+          <label for="mailerPassInput">Password</label>
+          <input type="password" id="mailerPassInput">
+        </div>
+        <div class="field">
+          <label for="mailerFromNameInput">From name</label>
+          <input type="text" id="mailerFromNameInput" placeholder="Your Name - Podcast">
+        </div>
+        <a class="imap-advanced-toggle" id="imapAdvancedToggle">Advanced: IMAP settings (for bounce detection)</a>
+        <div id="imapAdvancedFields" style="display:none;margin-top:10px">
+          <div class="field">
+            <label for="mailerImapHostInput">IMAP host</label>
+            <input type="text" id="mailerImapHostInput" placeholder="defaults to SMTP host">
+          </div>
+          <div class="row">
+            <div class="field" style="flex:1">
+              <label for="mailerImapPortInput">IMAP port</label>
+              <input type="text" id="mailerImapPortInput" placeholder="993">
+            </div>
+            <div class="field" style="flex:1">
+              <label for="mailerImapSecureInput">Secure (TLS)</label>
+              <select id="mailerImapSecureInput"><option value="true">Yes</option><option value="false">No</option></select>
+            </div>
+          </div>
+        </div>
+        <div class="onboarding-error" id="mailerError" style="display:none"></div>
+        <div class="row" style="margin-top:14px">
+          <button id="testConnectMailerBtn">Test &amp; Connect</button>
+          <button class="secondary" id="cancelCustomMailerBtn">Back</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="topbar" style="display:none">
   <div class="topbar-left">
     <div class="app-icon">
       <svg width="34" height="28" viewBox="0 0 260 210" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -273,11 +380,12 @@
   </div>
   <div class="topbar-right">
     <span class="pill" id="fromEmailPill"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> <span id="fromEmailText">Sending from —</span></span>
+    <button class="secondary" id="logoutBtn">Log out</button>
     <button id="newTemplateBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> New Template</button>
   </div>
 </div>
 
-<div class="app-shell">
+<div class="app-shell" style="display:none">
   <div class="sidebar" id="sidebar">
     <div class="sidebar-nav">
       <div class="navitem active" data-view="guests"><span class="icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span class="navlabel">Guests</span></div>
@@ -640,7 +748,10 @@ function setActiveNav(view) {
 }
 document.querySelectorAll('.sidebar-nav .navitem').forEach(item => item.onclick = () => setActiveNav(item.dataset.view));
 
-document.getElementById('settingsNav').onclick = () => showToast('Settings — coming soon');
+document.getElementById('settingsNav').onclick = () => {
+  settingsReconnectMode = true;
+  showOnboardingStep2();
+};
 document.getElementById('helpNav').onclick = () => showToast('Help — coming soon');
 document.getElementById('collapseBtn').onclick = () => document.getElementById('sidebar').classList.toggle('collapsed');
 
@@ -655,6 +766,169 @@ async function loadConfig() {
   const cfg = await res.json();
   document.getElementById('fromEmailText').textContent = 'Sending from ' + (cfg.fromEmail || 'unknown');
 }
+
+// ---- auth / onboarding ----
+// Gates the whole app behind an identity + a connected mailer: the topbar
+// and app-shell (both always in the DOM) are hidden while onboarding is
+// showing, and only revealed once /api/auth/me confirms a session with
+// mailerType set. See the boot sequence at the bottom of this file.
+let currentUser = null;
+let authMode = 'signup'; // 'signup' | 'login'
+// True when onboarding step 2 was reopened from the Settings nav (to
+// reconnect/change mailer) rather than during first-time signup — changes
+// what happens after a mailer choice succeeds (return to the app vs. finish
+// onboarding).
+let settingsReconnectMode = false;
+
+function showOnboarding() {
+  document.querySelector('.topbar').style.display = 'none';
+  document.querySelector('.app-shell').style.display = 'none';
+  document.getElementById('onboardingView').style.display = 'flex';
+}
+
+function showOnboardingStep1() {
+  showOnboarding();
+  document.getElementById('onboardingStep1').style.display = 'block';
+  document.getElementById('onboardingStep2').style.display = 'none';
+  setAuthMode('signup');
+}
+
+function showOnboardingStep2() {
+  showOnboarding();
+  document.getElementById('onboardingStep1').style.display = 'none';
+  document.getElementById('onboardingStep2').style.display = 'block';
+  document.getElementById('customMailerForm').style.display = 'none';
+  document.getElementById('mailerError').style.display = 'none';
+  document.getElementById('presetAccountLabel').textContent = currentUser?.presetFromEmail || 'the shared account';
+}
+
+async function enterApp() {
+  document.getElementById('onboardingView').style.display = 'none';
+  document.querySelector('.topbar').style.display = 'flex';
+  document.querySelector('.app-shell').style.display = 'flex';
+  await loadConfig();
+  loadTemplates();
+  loadGuests();
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  document.getElementById('authTitle').textContent = mode === 'signup' ? 'Create your account' : 'Log in';
+  document.getElementById('authNameField').style.display = mode === 'signup' ? 'block' : 'none';
+  document.getElementById('authContinueBtn').textContent = mode === 'signup' ? 'Continue' : 'Log in';
+  document.getElementById('authSwitchText').textContent = mode === 'signup' ? 'Already have an account?' : "Don't have an account?";
+  document.getElementById('authSwitchLink').textContent = mode === 'signup' ? 'Log in' : 'Sign up';
+  document.getElementById('authError').style.display = 'none';
+}
+document.getElementById('authSwitchLink').onclick = () => setAuthMode(authMode === 'signup' ? 'login' : 'signup');
+
+document.getElementById('authContinueBtn').onclick = async () => {
+  const errorEl = document.getElementById('authError');
+  const showAuthError = (msg) => { errorEl.textContent = msg; errorEl.style.display = 'block'; };
+  errorEl.style.display = 'none';
+
+  const name = document.getElementById('authNameInput').value.trim();
+  const email = document.getElementById('authEmailInput').value.trim();
+  const password = document.getElementById('authPasswordInput').value;
+
+  if (authMode === 'signup' && !name) return showAuthError('Name is required');
+  if (!email) return showAuthError('Email is required');
+  if (!password) return showAuthError('Password is required');
+
+  await withButtonLoading(document.getElementById('authContinueBtn'), authMode === 'signup' ? 'Creating...' : 'Logging in...', async () => {
+    try {
+      const res = await fetch(`/api/auth/${authMode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(authMode === 'signup' ? { name, email, password } : { email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) return showAuthError(data.error || 'Something went wrong');
+      currentUser = data;
+      if (!currentUser.mailerType) showOnboardingStep2();
+      else await enterApp();
+    } catch (_) {
+      showAuthError('Network error — try again');
+    }
+  });
+};
+
+async function afterMailerConnected() {
+  if (settingsReconnectMode) {
+    settingsReconnectMode = false;
+    document.getElementById('onboardingView').style.display = 'none';
+    document.querySelector('.topbar').style.display = 'flex';
+    document.querySelector('.app-shell').style.display = 'flex';
+    await loadConfig();
+    showToast('Connected');
+  } else {
+    await enterApp();
+  }
+}
+
+document.getElementById('usePresetChoice').onclick = async () => {
+  try {
+    const res = await fetch('/api/auth/mailer/preset', { method: 'POST' });
+    if (!res.ok) return showToast('Could not connect the shared account', true);
+    currentUser.mailerType = 'preset';
+    await afterMailerConnected();
+  } catch (_) {
+    showToast('Network error — try again', true);
+  }
+};
+
+document.getElementById('useCustomChoice').onclick = () => {
+  document.getElementById('customMailerForm').style.display = 'block';
+};
+document.getElementById('cancelCustomMailerBtn').onclick = () => {
+  document.getElementById('customMailerForm').style.display = 'none';
+};
+document.getElementById('imapAdvancedToggle').onclick = () => {
+  const el = document.getElementById('imapAdvancedFields');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+};
+
+document.getElementById('testConnectMailerBtn').onclick = async () => {
+  const errorEl = document.getElementById('mailerError');
+  const showMailerError = (msg) => { errorEl.textContent = msg; errorEl.style.display = 'block'; };
+  errorEl.style.display = 'none';
+
+  const payload = {
+    host: document.getElementById('mailerHostInput').value.trim(),
+    port: document.getElementById('mailerPortInput').value.trim(),
+    secure: document.getElementById('mailerSecureInput').value === 'true',
+    user: document.getElementById('mailerUserInput').value.trim(),
+    pass: document.getElementById('mailerPassInput').value,
+    fromName: document.getElementById('mailerFromNameInput').value.trim(),
+    imapHost: document.getElementById('mailerImapHostInput').value.trim(),
+    imapPort: document.getElementById('mailerImapPortInput').value.trim(),
+    imapSecure: document.getElementById('mailerImapSecureInput').value === 'true',
+  };
+  if (!payload.host || !payload.port || !payload.user || !payload.pass) {
+    return showMailerError('Host, port, email, and password are required');
+  }
+
+  await withButtonLoading(document.getElementById('testConnectMailerBtn'), 'Testing...', async () => {
+    try {
+      const res = await fetch('/api/auth/mailer/custom', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) return showMailerError(data.error || 'Could not connect');
+      currentUser.mailerType = 'custom';
+      await afterMailerConnected();
+    } catch (_) {
+      showMailerError('Network error — try again');
+    }
+  });
+};
+
+document.getElementById('logoutBtn').onclick = async () => {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  location.reload();
+};
 
 // ---- templates ----
 let templates = [];
@@ -1620,9 +1894,18 @@ function showToast(msg, isError) {
   setTimeout(() => t.remove(), 5000);
 }
 
-loadConfig();
-loadTemplates();
-loadGuests();
+(async function boot() {
+  try {
+    const res = await fetch('/api/auth/me');
+    const data = await res.json();
+    if (!data.authenticated) { showOnboardingStep1(); return; }
+    currentUser = data;
+    if (!data.mailerType) { showOnboardingStep2(); return; }
+    await enterApp();
+  } catch (_) {
+    showOnboardingStep1();
+  }
+})();
 </script>
 </body>
 </html>
