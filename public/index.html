@@ -237,7 +237,9 @@
   .onboarding-error { color: var(--red); font-size: 12.5px; margin: 4px 0 8px; text-align: left; }
   .onboarding-switch { text-align: center; font-size: 13px; color: var(--muted); margin-top: 18px; }
   .onboarding-switch a { color: var(--accent); cursor: pointer; }
-  .mailer-choice { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; text-align: left; }
+  .onboarding-back-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--muted); cursor: pointer; margin-bottom: 14px; }
+  .onboarding-back-link:hover { color: var(--text); }
+  .mailer-choice { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; text-align: left; display: block; text-decoration: none; color: inherit; }
   .mailer-choice:hover { border-color: var(--accent); background: #171b26; }
   .mailer-choice-title { font-weight: 600; font-size: 13.5px; }
   .mailer-choice-sub { font-size: 12px; color: var(--muted); margin-top: 3px; word-break: break-word; }
@@ -326,6 +328,7 @@
     </div>
 
     <div id="onboardingStep2" style="display:none">
+      <a id="step2BackLink" class="onboarding-back-link"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg> Back</a>
       <h3>Connect an email account</h3>
       <p style="color:var(--muted);font-size:13px;margin:0 0 16px;text-align:left">Choose how invitations get sent for your account.</p>
 
@@ -333,9 +336,17 @@
         <div class="mailer-choice-title">Use the shared podcast account</div>
         <div class="mailer-choice-sub" id="presetAccountLabel">—</div>
       </div>
+      <a class="mailer-choice" id="useGoogleChoice" href="/api/oauth/google/start">
+        <div class="mailer-choice-title">Connect with Google</div>
+        <div class="mailer-choice-sub">Sign in with Gmail — no password or setup needed</div>
+      </a>
+      <a class="mailer-choice" id="useZohoChoice" href="/api/oauth/zoho/start">
+        <div class="mailer-choice-title">Connect with Zoho Mail</div>
+        <div class="mailer-choice-sub">Works even on Zoho's free plan, which has no SMTP/IMAP access</div>
+      </a>
       <div class="mailer-choice" id="useCustomChoice">
-        <div class="mailer-choice-title">Connect your own email account</div>
-        <div class="mailer-choice-sub">SMTP + IMAP, verified before it's saved</div>
+        <div class="mailer-choice-title">Connect your own email (SMTP/IMAP)</div>
+        <div class="mailer-choice-sub">For any other provider — verified before it's saved</div>
       </div>
 
       <div id="customMailerForm" style="display:none;margin-top:6px">
@@ -870,16 +881,13 @@ function showOnboardingStep2() {
   document.getElementById('onboardingStep1').style.display = 'none';
   document.getElementById('onboardingStep2').style.display = 'block';
   document.getElementById('mailerError').style.display = 'none';
+  document.getElementById('customMailerForm').style.display = 'none';
 
   // The shared account is only offered to the one identity it actually
-  // belongs to — everyone else only ever sees "connect your own email,"
-  // and goes straight into that form since there's no real choice to make.
+  // belongs to — everyone else picks Google, Zoho, or their own SMTP/IMAP.
   const canUsePreset = !!currentUser?.canUsePreset;
   document.getElementById('usePresetChoice').style.display = canUsePreset ? 'block' : 'none';
-  document.getElementById('useCustomChoice').style.display = canUsePreset ? 'block' : 'none';
-  document.getElementById('cancelCustomMailerBtn').style.display = canUsePreset ? 'inline-flex' : 'none';
   document.getElementById('presetAccountLabel').textContent = currentUser?.presetFromEmail || '';
-  document.getElementById('customMailerForm').style.display = canUsePreset ? 'none' : 'block';
 }
 
 async function enterApp() {
@@ -945,6 +953,24 @@ async function afterMailerConnected() {
     await enterApp();
   }
 }
+
+// Reopened from Settings (an already-working account just changing its
+// mailer) → back just cancels, returning to the app unchanged. Reached
+// during first-time onboarding instead (no mailer chosen yet) → there's no
+// "app" to return to, so back means starting over: log out and show the
+// sign up/log in screen again.
+document.getElementById('step2BackLink').onclick = async () => {
+  if (settingsReconnectMode) {
+    settingsReconnectMode = false;
+    document.getElementById('onboardingView').style.display = 'none';
+    document.querySelector('.topbar').style.display = 'flex';
+    document.querySelector('.app-shell').style.display = 'flex';
+  } else {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    currentUser = null;
+    showOnboardingStep1();
+  }
+};
 
 document.getElementById('usePresetChoice').onclick = async () => {
   try {
@@ -1987,6 +2013,19 @@ function showToast(msg, isError) {
 }
 
 (async function boot() {
+  // A real OAuth consent screen requires a full-page redirect away from and
+  // back to this app (see useGoogleChoice/useZohoChoice) — this is how the
+  // callback communicates success/failure back to the SPA on return.
+  const params = new URLSearchParams(location.search);
+  const oauthStatus = params.get('oauth');
+  if (oauthStatus === 'connected') {
+    const provider = params.get('provider') || '';
+    showToast(`Connected${provider ? ' to ' + provider.charAt(0).toUpperCase() + provider.slice(1) : ''}`);
+  } else if (oauthStatus === 'error') {
+    showToast(params.get('message') || 'Connection failed', true);
+  }
+  if (oauthStatus) history.replaceState(null, '', location.pathname);
+
   try {
     const res = await fetch('/api/auth/me');
     const data = await res.json();

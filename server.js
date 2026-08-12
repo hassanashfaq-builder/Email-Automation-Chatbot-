@@ -12,10 +12,12 @@ const {
 const { fillTemplate } = require('./lib/templates');
 const { findBounces } = require('./lib/bounces');
 const {
-  hashPassword, verifyPassword, signSession, verifySession, readSessionCookie,
+  hashPassword, verifyPassword, signSession, verifySession,
+  signOAuthState, verifyOAuthState, readSessionCookie,
   setSessionCookie, clearSessionCookie, authRequired,
 } = require('./lib/auth');
 const { encrypt, decrypt } = require('./lib/crypto');
+const mailerProviders = require('./lib/mailer-providers');
 
 function loadConfig() {
   const configPath = path.join(__dirname, 'config.json');
@@ -123,33 +125,125 @@ async function domainHasMailServer(email) {
   return false;
 }
 
-// Every user sends through either the shared preset mailer or their own
-// verified SMTP/IMAP credentials — this is the one place that decides which,
-// so every route below just asks for "this user's mailer config" instead of
-// duplicating the branch.
-function resolveMailerConfig(user) {
-  if (user && user.mailerType === 'custom' && user.mailer) {
-    const m = user.mailer;
-    return {
-      host: m.host,
-      port: m.port,
-      secure: m.secure,
-      auth: { user: m.user, pass: decrypt(m.passEncrypted) },
-      fromName: m.fromName,
-      imapHost: m.imapHost || m.host,
-      imapPort: m.imapPort || 993,
-      imapSecure: m.imapSecure !== false,
-    };
-  }
-  return presetConfig;
+// The shared preset account normalized to the same {send, bounceCheck} shape
+// every other mailer type returns, so callers never special-case it.
+function presetMailerConfig() {
+  return {
+    send: { via: 'smtp', host: presetConfig.host, port: presetConfig.port, secure: presetConfig.secure, auth: presetConfig.auth, fromName: presetConfig.fromName },
+    bounceCheck: { via: 'imap', host: presetConfig.imapHost, port: presetConfig.imapPort, secure: presetConfig.imapSecure, user: presetConfig.auth.user, pass: presetConfig.auth.pass },
+  };
 }
 
-function getTransporter(mailerConfig) {
+// Just the address to display (e.g. the topbar pill) — never triggers a
+// live token refresh, unlike resolveMailerConfig below. Used by routes that
+// only need to show *which* mailbox is connected, not actually use it.
+function getDisplayEmail(user) {
+  if (user?.mailerType === 'custom' && user.mailer) return user.mailer.user;
+  if ((user?.mailerType === 'oauth_google' || user?.mailerType === 'oauth_zoho') && user.mailer) return user.mailer.email;
+  return presetConfig.auth.user;
+}
+
+// Checks the stored OAuth access token's expiry (with a buffer for clock
+// skew + the round-trip time of whatever's about to use it) and refreshes
+// via the provider if needed, persisting the new token immediately. Every
+// serverless invocation is a fresh process with no shared memory, so this
+// check happens fresh on every call — there's no proactive refresh from
+// anywhere else, which keeps concurrent-refresh races rare in practice.
+async function getValidAccessToken(user, provider) {
+  const m = user.mailer;
+  const BUFFER_MS = 3 * 60 * 1000;
+  if (m.accessToken && m.accessTokenExpiresAt && Date.now() < m.accessTokenExpiresAt - BUFFER_MS) {
+    return decrypt(m.accessToken);
+  }
+
+  const providerModule = mailerProviders.get(provider);
+  const refreshToken = decrypt(m.refreshTokenEncrypted);
+  const refreshed = provider === 'zoho'
+    ? await providerModule.refreshAccessToken(refreshToken, m.zohoDcLocation)
+    : await providerModule.refreshAccessToken(refreshToken);
+
+  const patch = {
+    mailer: {
+      ...m,
+      accessToken: encrypt(refreshed.access_token),
+      accessTokenExpiresAt: Date.now() + (refreshed.expires_in || 3600) * 1000,
+    },
+  };
+  // Some providers rotate the refresh token on every refresh and may
+  // invalidate the previous one — always persist a new one if given.
+  if (refreshed.refresh_token) {
+    patch.mailer.refreshTokenEncrypted = encrypt(refreshed.refresh_token);
+  }
+  await updateUser(user.id, patch);
+
+  return refreshed.access_token;
+}
+
+// Every user sends through the shared preset mailer, their own SMTP/IMAP
+// credentials, or an OAuth-connected mailbox — this is the one place that
+// resolves which, returning a normalized {send, bounceCheck} shape so
+// callers never branch on mailerType directly. `send`/`bounceCheck` are
+// separate because they're not always the same transport — e.g. an
+// OAuth-connected mailbox might send via a REST API but still check bounces
+// via IMAP.
+async function resolveMailerConfig(user) {
+  if (!user) return presetMailerConfig();
+
+  if (user.mailerType === 'custom' && user.mailer) {
+    const m = user.mailer;
+    const auth = { user: m.user, pass: decrypt(m.passEncrypted) };
+    return {
+      send: { via: 'smtp', host: m.host, port: m.port, secure: m.secure, auth, fromName: m.fromName },
+      bounceCheck: { via: 'imap', host: m.imapHost || m.host, port: m.imapPort || 993, secure: m.imapSecure !== false, user: m.user, pass: auth.pass },
+    };
+  }
+
+  if (user.mailerType === 'oauth_google' && user.mailer) {
+    const accessToken = await getValidAccessToken(user, 'google');
+    const auth = {
+      type: 'OAuth2',
+      user: user.mailer.email,
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      refreshToken: decrypt(user.mailer.refreshTokenEncrypted),
+      accessToken,
+    };
+    return {
+      // Gmail's IMAP requires the same broad scope as sending anyway, so
+      // both go through the *existing* nodemailer/imapflow code paths —
+      // only the auth object differs from a password-based account.
+      send: { via: 'smtp', host: 'smtp.gmail.com', port: 465, secure: true, auth, fromName: user.mailer.fromName },
+      bounceCheck: { via: 'imap', host: 'imap.gmail.com', port: 993, secure: true, user: user.mailer.email, accessToken },
+    };
+  }
+
+  if (user.mailerType === 'oauth_zoho' && user.mailer) {
+    const accessToken = await getValidAccessToken(user, 'zoho');
+    const shared = {
+      provider: 'zoho',
+      accessToken,
+      fromEmail: user.mailer.email,
+      fromName: user.mailer.fromName,
+      zohoAccountId: user.mailer.zohoAccountId,
+      zohoDcLocation: user.mailer.zohoDcLocation,
+    };
+    // Zoho has no SMTP/IMAP OAuth support at all — both sending and
+    // bounce-checking go through its REST Mail API.
+    return {
+      send: { via: 'rest', ...shared },
+      bounceCheck: { via: 'rest', ...shared },
+    };
+  }
+
+  return presetMailerConfig();
+}
+
+function getTransporter(send) {
   return nodemailer.createTransport({
-    host: mailerConfig.host,
-    port: mailerConfig.port,
-    secure: mailerConfig.secure,
-    auth: mailerConfig.auth,
+    host: send.host,
+    port: send.port,
+    secure: send.secure,
+    auth: send.auth,
   });
 }
 
@@ -262,7 +356,7 @@ app.get('/api/auth/me', async (req, res) => {
     res.json({
       authenticated: true,
       ...publicUser(user),
-      fromEmail: resolveMailerConfig(user).auth.user,
+      fromEmail: getDisplayEmail(user),
     });
   } catch (_) {
     res.json({ authenticated: false });
@@ -312,10 +406,103 @@ app.post('/api/auth/mailer/custom', authRequired, async (req, res) => {
   res.json({ ok: true, mailerType: 'custom' });
 });
 
+function oauthRedirectUri(provider) {
+  return `${baseUrl}/api/oauth/${provider}/callback`;
+}
+
+// Starts an OAuth connection to Gmail or Zoho — for mailboxes that either
+// have no usable SMTP/IMAP access at all (Zoho's free tier) or where the
+// user simply doesn't know their own SMTP settings. A real consent screen
+// requires a full browser navigation, not a fetch call, so this just 302s.
+app.get('/api/oauth/:provider/start', authRequired, (req, res) => {
+  let providerModule;
+  try {
+    providerModule = mailerProviders.get(req.params.provider);
+  } catch (_) {
+    return res.status(404).send('Unknown provider');
+  }
+  try {
+    const state = signOAuthState(req.userId, req.params.provider);
+    res.redirect(providerModule.buildAuthUrl(state, oauthRedirectUri(req.params.provider)));
+  } catch (err) {
+    // A known provider that's missing its CLIENT_ID/CLIENT_SECRET env vars —
+    // a server setup problem, not something retrying will fix, so surface
+    // it plainly instead of a raw 500 with a stack trace.
+    res.status(500).send(err.message);
+  }
+});
+
+// Public — hit by the provider's own redirect, not by our frontend, so
+// there's no session cookie to rely on. Identity comes solely from the
+// signed `state` token minted at /start; never falls back to a cookie even
+// if one happens to be present, to avoid a fragile dual trust boundary.
+app.get('/api/oauth/:provider/callback', async (req, res) => {
+  const { provider } = req.params;
+  const { code, state, location: zohoLocation, error: providerError } = req.query;
+  const fail = (message) => res.redirect(`/?oauth=error&message=${encodeURIComponent(message)}`);
+
+  if (providerError) return fail(`${provider} sign-in was cancelled or failed`);
+  if (!code || !state) return fail('Missing authorization response');
+
+  let stateData;
+  try {
+    stateData = verifyOAuthState(state);
+  } catch (_) {
+    return fail('This connection link expired or is invalid — try again');
+  }
+  // A state minted for one provider must never be honored at another's
+  // callback (they're separate routes, but the token itself doesn't have to
+  // be trusted to have arrived at the "right" URL).
+  if (stateData.provider !== provider) return fail('Provider mismatch — try again');
+
+  try {
+    const providerModule = mailerProviders.get(provider);
+    const tokenData = await providerModule.exchangeCode(code, oauthRedirectUri(provider));
+    if (!tokenData.refresh_token) {
+      return fail('Did not get a lasting connection — if you\'ve connected this app before, remove it from your account\'s connected-apps settings and try again');
+    }
+
+    const accessTokenExpiresAt = Date.now() + (tokenData.expires_in || 3600) * 1000;
+    let mailerPatch;
+
+    if (provider === 'google') {
+      const email = await providerModule.fetchAccountEmail(tokenData.access_token);
+      mailerPatch = {
+        email,
+        fromName: email,
+        refreshTokenEncrypted: encrypt(tokenData.refresh_token),
+        accessToken: encrypt(tokenData.access_token),
+        accessTokenExpiresAt,
+      };
+    } else if (provider === 'zoho') {
+      const { accountId, email } = await providerModule.fetchAccountInfo(tokenData.access_token, zohoLocation);
+      mailerPatch = {
+        email,
+        fromName: email,
+        refreshTokenEncrypted: encrypt(tokenData.refresh_token),
+        accessToken: encrypt(tokenData.access_token),
+        accessTokenExpiresAt,
+        zohoAccountId: accountId,
+        zohoDcLocation: zohoLocation || 'us',
+      };
+    }
+
+    // The whole patch is built above before this one write — never persist
+    // tokens now / provider-specific ids (e.g. Zoho's accountId) later in a
+    // second write, since a crash between them would leave mailerType set
+    // with no working credentials and an opaque failure on every send.
+    await updateUser(stateData.uid, { mailerType: `oauth_${provider}`, mailer: mailerPatch });
+
+    res.redirect(`/?oauth=connected&provider=${provider}`);
+  } catch (err) {
+    fail(err.message);
+  }
+});
+
 app.get('/api/config', authRequired, async (req, res) => {
-  const mailerConfig = resolveMailerConfig(await findUserById(req.userId));
+  const user = await findUserById(req.userId);
   res.json({
-    fromEmail: mailerConfig.auth.user,
+    fromEmail: getDisplayEmail(user),
     openTrackingEnabled,
     openTrackingBlockedReason: onSharedVercelDomain ? 'BASE_URL is a *.vercel.app domain — set a custom domain to enable tracking' : null,
   });
@@ -516,19 +703,18 @@ app.get('/api/stats', authRequired, async (req, res) => {
 // later. Guests already marked failed are left alone (idempotent re-checks).
 app.post('/api/check-bounces', authRequired, async (req, res) => {
   try {
-    const mailerConfig = resolveMailerConfig(await findUserById(req.userId));
+    const currentUser = await findUserById(req.userId);
+    const mailerConfig = await resolveMailerConfig(currentUser);
     const guests = await loadGuests(req.userId);
     const sentDates = guests.map(g => g.sentAt && new Date(g.sentAt).getTime()).filter(n => n && !Number.isNaN(n));
     const since = sentDates.length ? new Date(Math.min(...sentDates)) : undefined;
 
-    const bounces = await findBounces({
-      host: mailerConfig.imapHost,
-      port: mailerConfig.imapPort,
-      secure: mailerConfig.imapSecure,
-      user: mailerConfig.auth.user,
-      pass: mailerConfig.auth.pass,
-      since,
-    });
+    let bounces = [];
+    if (mailerConfig.bounceCheck.via === 'imap') {
+      bounces = await findBounces({ ...mailerConfig.bounceCheck, since });
+    } else if (mailerConfig.bounceCheck.via === 'rest') {
+      bounces = await mailerProviders.get(mailerConfig.bounceCheck.provider).checkBounces(mailerConfig.bounceCheck, { since });
+    }
 
     if (!bounces.length) return res.json({ ok: true, checked: 0, matched: 0 });
 
@@ -556,7 +742,14 @@ app.post('/api/check-bounces', authRequired, async (req, res) => {
 // the batch by calling this once per selected guest.
 app.post('/api/process-one', authRequired, async (req, res) => {
   const { email, templateId } = req.body;
-  const mailerConfig = resolveMailerConfig(await findUserById(req.userId));
+  const currentUser = await findUserById(req.userId);
+
+  let mailerConfig;
+  try {
+    mailerConfig = await resolveMailerConfig(currentUser);
+  } catch (err) {
+    return res.status(400).json({ ok: false, error: `Mailer connection error: ${err.message}` });
+  }
 
   const guests = await loadGuests(req.userId);
   const guest = guests.find(g => g.email === email);
@@ -600,11 +793,17 @@ app.post('/api/process-one', authRequired, async (req, res) => {
       return fail(`"${guest.email.split('@')[1]}" has no mail server (MX/A record) — address can't receive email`);
     }
 
-    const transporter = getTransporter(mailerConfig);
-    try {
-      await transporter.verify();
-    } catch (err) {
-      return fail(`SMTP connection failed: ${err.message}`);
+    // REST-based providers (Zoho) were already verified at connect time
+    // (fetching accountId doubles as that check) — only the SMTP path needs
+    // a live connection check here.
+    let transporter = null;
+    if (mailerConfig.send.via === 'smtp') {
+      transporter = getTransporter(mailerConfig.send);
+      try {
+        await transporter.verify();
+      } catch (err) {
+        return fail(`SMTP connection failed: ${err.message}`);
+      }
     }
 
     const subject = fillTemplate(template.subject, guest);
@@ -621,27 +820,32 @@ app.post('/api/process-one', authRequired, async (req, res) => {
       ? `<img src="${baseUrl}/api/e/${guest.id}.png" width="1" height="1" alt="">`
       : '';
     const html = textToHtml(body) + trackingPixel;
-    // Message-ID/List-Unsubscribe/Reply-To are set explicitly because a
-    // cPanel-style sending host commonly runs outbound SpamAssassin scoring
-    // and rejects the SMTP transaction itself — same "550 classified as
-    // SPAM" text regardless of recipient domain — when these are
-    // missing/generic. nodemailer's default Message-ID uses the local
-    // machine/container hostname, which doesn't match the sending domain
-    // and scores as suspicious.
-    const senderDomain = mailerConfig.auth.user.split('@')[1];
-    await sendMailWithRetry(transporter, {
-      from: `"${mailerConfig.fromName}" <${mailerConfig.auth.user}>`,
-      to: guest.email,
-      replyTo: mailerConfig.auth.user,
-      subject,
-      text: body,
-      html,
-      messageId: `<${crypto.randomUUID()}@${senderDomain}>`,
-      headers: {
-        'List-Unsubscribe': `<mailto:${mailerConfig.auth.user}?subject=unsubscribe>`,
-        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-      },
-    });
+
+    if (mailerConfig.send.via === 'smtp') {
+      // Message-ID/List-Unsubscribe/Reply-To are set explicitly because a
+      // cPanel-style sending host commonly runs outbound SpamAssassin scoring
+      // and rejects the SMTP transaction itself — same "550 classified as
+      // SPAM" text regardless of recipient domain — when these are
+      // missing/generic. nodemailer's default Message-ID uses the local
+      // machine/container hostname, which doesn't match the sending domain
+      // and scores as suspicious.
+      const senderDomain = mailerConfig.send.auth.user.split('@')[1];
+      await sendMailWithRetry(transporter, {
+        from: `"${mailerConfig.send.fromName}" <${mailerConfig.send.auth.user}>`,
+        to: guest.email,
+        replyTo: mailerConfig.send.auth.user,
+        subject,
+        text: body,
+        html,
+        messageId: `<${crypto.randomUUID()}@${senderDomain}>`,
+        headers: {
+          'List-Unsubscribe': `<mailto:${mailerConfig.send.auth.user}?subject=unsubscribe>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
+      });
+    } else {
+      await mailerProviders.get(mailerConfig.send.provider).sendMail(mailerConfig.send, { to: guest.email, subject, text: body, html });
+    }
 
     const all2 = await loadGuests(req.userId);
     const idx2 = all2.findIndex(g => g.email === email);
