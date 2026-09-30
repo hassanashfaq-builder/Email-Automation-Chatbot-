@@ -5,7 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 const dns = require('dns');
 const {
-  loadGuests, saveGuests, loadGuestByIdUnscoped, updateGuestByIdUnscoped,
+  loadGuests, saveGuests, upsertGuests, loadGuestByIdUnscoped, updateGuestByIdUnscoped,
   loadTemplates, saveTemplates,
   findUserByEmail, findUserById, createUser, updateUser, claimUnownedData,
 } = require('./lib/db');
@@ -515,13 +515,14 @@ app.post('/api/guests/import', authRequired, async (req, res) => {
   const incoming = req.body.guests || [];
   const existing = await loadGuests(req.userId);
   const byEmail = new Map(existing.map(g => [g.email.toLowerCase(), g]));
+  const touched = new Map(); // key -> { matchEmail, guest }, only rows this import adds/updates
 
   for (const g of incoming) {
-    if (!g.email) continue;
-    const key = g.email.toLowerCase();
+    if (!g.email || !g.email.trim()) continue;
+    const key = g.email.trim().toLowerCase();
     const prev = byEmail.get(key);
-    const name = (g.name || '').trim() || g.email.split('@')[0];
-    byEmail.set(key, {
+    const name = (g.name || '').trim() || g.email.trim().split('@')[0];
+    const guest = {
       id: prev?.id ?? crypto.randomUUID(),
       name,
       email: g.email.trim(),
@@ -536,12 +537,13 @@ app.post('/api/guests/import', authRequired, async (req, res) => {
       opened: prev?.opened ?? false,
       openedAt: prev?.openedAt ?? null,
       openCount: prev?.openCount ?? 0,
-    });
+    };
+    byEmail.set(key, guest);
+    touched.set(key, { matchEmail: touched.get(key)?.matchEmail ?? prev?.email ?? null, guest });
   }
 
-  const merged = [...byEmail.values()];
-  await saveGuests(req.userId, merged);
-  res.json(merged);
+  await upsertGuests(req.userId, [...touched.values()]);
+  res.json([...byEmail.values()]);
 });
 
 // Edit a guest's name/email/background by id (rather than by email, since

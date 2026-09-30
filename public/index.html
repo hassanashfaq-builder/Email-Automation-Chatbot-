@@ -1764,6 +1764,29 @@ function updatePastePreviewCount() {
 }
 document.getElementById('pasteArea').addEventListener('input', updatePastePreviewCount);
 
+// POSTs to the import endpoint and throws a readable Error unless the server
+// actually saved the guests — the buttons below used to show "Added N" even
+// when the request failed (expired session, server/DB error), so nothing got
+// added and nothing said why.
+async function postGuestImport(parsed) {
+  let res;
+  try {
+    res = await fetch('/api/guests/import', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guests: parsed })
+    });
+  } catch (_) {
+    throw new Error('Could not reach the server — check your connection and try again');
+  }
+  if (res.status === 401) throw new Error('Your session expired — please log in again');
+  if (res.status === 413) throw new Error('That list is too large to import at once — split it into smaller batches');
+  if (!res.ok) {
+    let msg = '';
+    try { msg = (await res.json()).error || ''; } catch (_) {}
+    throw new Error(`Could not save guests (${res.status})${msg ? ': ' + msg : ''}`);
+  }
+}
+
 document.getElementById('importPasteBtn').onclick = async () => {
   const raw = document.getElementById('pasteArea').value.trim();
   if (!raw) return;
@@ -1772,10 +1795,7 @@ document.getElementById('importPasteBtn').onclick = async () => {
   if (!parsed.length) { showToast('No rows with a detectable email address were found.', true); return; }
 
   await withButtonLoading(document.getElementById('importPasteBtn'), 'Adding...', async () => {
-    await fetch('/api/guests/import', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ guests: parsed })
-    });
+    try { await postGuestImport(parsed); } catch (err) { showToast(err.message, true); return; }
     document.getElementById('pasteArea').value = '';
     updatePastePreviewCount();
     showToast(`Added ${parsed.length} guest(s)` + (skipped.length ? ` — skipped ${skipped.length} row(s) with no detectable email` : ''), skipped.length > 0);
@@ -1865,10 +1885,7 @@ document.getElementById('importCsvBtn').onclick = async () => {
   }
 
   await withButtonLoading(document.getElementById('importCsvBtn'), 'Adding...', async () => {
-    await fetch('/api/guests/import', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ guests: parsed })
-    });
+    try { await postGuestImport(parsed); } catch (err) { showToast(err.message, true); return; }
     csvFileInput.value = '';
     updateDropzoneDisplay();
     showToast(`Added ${parsed.length} guest(s) from CSV`);
