@@ -71,6 +71,10 @@
   tr:last-child td { border-bottom: none; }
   tr.row-removing { opacity: 0.4; pointer-events: none; transition: opacity 0.15s; }
   .name-cell { font-weight: 600; }
+  /* same email as an earlier row — kept visible, just flagged */
+  tr.dup-row td { background: rgba(255, 107, 107, 0.12); }
+  tr.dup-row td:first-child { box-shadow: inset 3px 0 0 var(--red); }
+  .dup-badge { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--red); background: rgba(255, 107, 107, 0.16); border: 1px solid rgba(255, 107, 107, 0.5); vertical-align: middle; white-space: nowrap; }
   .email-cell { color: var(--muted); }
   .bg-cell { color: var(--muted); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .link-btn { background: none; border: none; color: var(--accent); text-decoration: underline; cursor: pointer; font-size: 12px; padding: 0; margin-right: 10px; display: inline-flex; align-items: center; gap: 4px; }
@@ -761,7 +765,7 @@ const PAGE_SIZE = 10;
 const guestRows = document.getElementById('guestRows');
 const sendBtn = document.getElementById('sendBtn');
 const deleteBtn = document.getElementById('deleteBtn');
-const checkedEmails = new Set(); // survives across pagination/re-render
+const checkedIds = new Set(); // guest ids; survives across pagination/re-render
 
 // ---- inline icon set (no external dependency) ----
 const ICON_EYE = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -1450,7 +1454,7 @@ async function loadGuests() {
   guestsLoadedOnce = true;
   // never leave an already-sent guest checked (e.g. after a send completes
   // elsewhere and this list reloads) — but no auto-selecting of new guests.
-  guests.forEach(g => { if (g.sent) checkedEmails.delete(g.email); });
+  guests.forEach(g => { if (g.sent) checkedIds.delete(g.id); });
   applyFilters();
 }
 
@@ -1493,25 +1497,37 @@ function render() {
   const totalPages = Math.max(1, Math.ceil(filteredGuests.length / PAGE_SIZE));
   const pageItems = filteredGuests.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
+  // A row is a duplicate when an earlier row (in list order) has the same
+  // email. Computed over the whole list, not just this page, so the flag
+  // doesn't depend on pagination or the active filter.
+  const seenEmails = new Set();
+  const duplicateIds = new Set();
+  guests.forEach(g => {
+    const key = (g.email || '').trim().toLowerCase();
+    if (seenEmails.has(key)) duplicateIds.add(g.id); else seenEmails.add(key);
+  });
+
   guestRows.innerHTML = '';
   pageItems.forEach((g) => {
     const tr = document.createElement('tr');
     const st = statusInfo(g);
+    const isDup = duplicateIds.has(g.id);
+    if (isDup) tr.classList.add('dup-row');
     tr.innerHTML = `
-      <td><input type="checkbox" data-email="${g.email}" ${checkedEmails.has(g.email) ? 'checked' : ''}></td>
-      <td class="name-cell">${escapeHtml(g.name)}</td>
+      <td><input type="checkbox" data-id="${g.id}" ${checkedIds.has(g.id) ? 'checked' : ''}></td>
+      <td class="name-cell">${escapeHtml(g.name)}${isDup ? '<span class="dup-badge" title="This email is already in the list">Duplicate</span>' : ''}</td>
       <td class="email-cell">${escapeHtml(g.email)}</td>
       <td class="bg-cell" title="${escapeHtml(g.background || '')}">${escapeHtml(g.background || '—')}</td>
-      <td><span class="status-dot ${st.cls}" id="status-${cssId(g.email)}"><span class="dot"></span>${st.label}</span></td>
+      <td><span class="status-dot ${st.cls}" id="status-${cssId(g.id)}"><span class="dot"></span>${st.label}</span></td>
       <td>${escapeHtml(g.templateName || '—')}</td>
       <td>${relativeTime(g.sentAt)}</td>
       <td class="actions-cell" style="justify-content:flex-end">
-        ${st.cls === 'failed' ? `<button class="icon-btn" title="Retry send" data-retry="${g.email}" style="width:30px;height:30px">${ICON_RETRY}</button>` : ''}
-        ${g.body ? `<button class="icon-btn" title="Preview" data-preview="${g.email}" style="width:30px;height:30px">${ICON_EYE}</button>` : ''}
-        <button class="kebab-btn" data-kebab="${g.email}">${ICON_KEBAB}</button>
-        <div class="kebab-menu" data-kebab-menu="${g.email}">
-          <button data-edit="${g.email}">Edit</button>
-          <button class="danger" data-remove="${g.email}">Remove</button>
+        ${st.cls === 'failed' ? `<button class="icon-btn" title="Retry send" data-retry="${g.id}" style="width:30px;height:30px">${ICON_RETRY}</button>` : ''}
+        ${g.body ? `<button class="icon-btn" title="Preview" data-preview="${g.id}" style="width:30px;height:30px">${ICON_EYE}</button>` : ''}
+        <button class="kebab-btn" data-kebab="${g.id}">${ICON_KEBAB}</button>
+        <div class="kebab-menu" data-kebab-menu="${g.id}">
+          <button data-edit="${g.id}">Edit</button>
+          <button class="danger" data-remove="${g.id}">Remove</button>
         </div>
       </td>
     `;
@@ -1550,11 +1566,11 @@ document.getElementById('pageBtns').addEventListener('click', (e) => {
   render();
 });
 
-function cssId(email) { return email.replace(/[^a-z0-9]/gi, '_'); }
+function cssId(key) { return String(key).replace(/[^a-z0-9]/gi, '_'); }
 function escapeHtml(s) { return (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
 function updateSendCount() {
-  const checked = checkedEmails.size;
+  const checked = checkedIds.size;
   sendBtn.textContent = `Send Invitations (${checked})`;
   sendBtn.disabled = checked === 0;
   deleteBtn.disabled = checked === 0;
@@ -1568,22 +1584,22 @@ function updateSendCount() {
 
 guestRows.addEventListener('change', (e) => {
   if (e.target.type !== 'checkbox') return;
-  const email = e.target.dataset.email;
-  if (e.target.checked) checkedEmails.add(email); else checkedEmails.delete(email);
+  const id = e.target.dataset.id;
+  if (e.target.checked) checkedIds.add(id); else checkedIds.delete(id);
   updateSendCount();
 });
 
-let editingGuestEmail = null;
+let editingGuestId = null;
 
 // Sends (or resends) a single guest via the per-guest endpoint. Shared by
 // the bulk send loop and the per-row Retry button.
-async function sendOneGuest(email, templateId) {
-  const el = document.getElementById('status-' + cssId(email));
+async function sendOneGuest(id, templateId) {
+  const el = document.getElementById('status-' + cssId(id));
   if (el) { el.className = 'status-dot working'; el.innerHTML = '<span class="dot"></span>Sending...'; }
   try {
     const res = await fetch('/api/process-one', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, templateId })
+      body: JSON.stringify({ id, templateId })
     });
     const result = await res.json();
     return result.ok ? { ok: true } : { ok: false, error: result.error };
@@ -1604,20 +1620,20 @@ guestRows.addEventListener('click', async (e) => {
   const retryBtn = e.target.closest('[data-retry]');
 
   if (retryBtn) {
-    const email = retryBtn.dataset.retry;
-    const guest = guests.find(x => x.email === email);
+    const id = retryBtn.dataset.retry;
+    const guest = guests.find(x => x.id === id);
     const templateId = guest?.templateId || selectedTemplateId || templates[0]?.id;
     if (!templateId) { showToast('Add a template first (Templates tab)', true); return; }
     await withIconLoading(retryBtn, async () => {
-      const result = await sendOneGuest(email, templateId);
-      showToast(result.ok ? `Resent to ${guest ? guest.name : email}` : `Failed for ${guest ? guest.name : email}: ${result.error}`, !result.ok);
+      const result = await sendOneGuest(id, templateId);
+      showToast(result.ok ? `Resent to ${guest ? guest.name : id}` : `Failed for ${guest ? guest.name : id}: ${result.error}`, !result.ok);
       await loadGuests();
     });
     return;
   }
 
   if (previewBtn) {
-    const g = guests.find(x => x.email === previewBtn.dataset.preview);
+    const g = guests.find(x => x.id === previewBtn.dataset.preview);
     document.getElementById('modalName').textContent = `To: ${g.name} <${g.email}>`;
     document.getElementById('modalBody').textContent = g.body;
     document.getElementById('modalBackdrop').style.display = 'flex';
@@ -1630,8 +1646,8 @@ guestRows.addEventListener('click', async (e) => {
   }
   if (editBtn) {
     guestRows.querySelectorAll('.kebab-menu.open').forEach(m => m.classList.remove('open'));
-    const g = guests.find(x => x.email === editBtn.dataset.edit);
-    editingGuestEmail = g.email;
+    const g = guests.find(x => x.id === editBtn.dataset.edit);
+    editingGuestId = g.id;
     document.getElementById('editNameInput').value = g.name;
     document.getElementById('editEmailInput').value = g.email;
     document.getElementById('editBackgroundInput').value = g.background || '';
@@ -1642,7 +1658,7 @@ guestRows.addEventListener('click', async (e) => {
     const row = removeBtn.closest('tr');
     if (row) row.classList.add('row-removing');
     await fetch('/api/guests/' + encodeURIComponent(removeBtn.dataset.remove), { method: 'DELETE' });
-    checkedEmails.delete(removeBtn.dataset.remove);
+    checkedIds.delete(removeBtn.dataset.remove);
     loadGuests();
   }
 });
@@ -1655,7 +1671,7 @@ document.getElementById('saveEditBtn').onclick = async () => {
   if (!email) { showToast('Email is required', true); return; }
 
   await withButtonLoading(document.getElementById('saveEditBtn'), 'Saving...', async () => {
-    const guest = guests.find(g => g.email === editingGuestEmail);
+    const guest = guests.find(g => g.id === editingGuestId);
     const res = await fetch('/api/guests/' + encodeURIComponent(guest.id), {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, background })
@@ -1679,28 +1695,28 @@ document.getElementById('closeModalX').onclick = () => document.getElementById('
 document.getElementById('selectAllCb').addEventListener('change', (e) => {
   guestRows.querySelectorAll('input[type=checkbox]').forEach(cb => {
     cb.checked = e.target.checked;
-    if (e.target.checked) checkedEmails.add(cb.dataset.email); else checkedEmails.delete(cb.dataset.email);
+    if (e.target.checked) checkedIds.add(cb.dataset.id); else checkedIds.delete(cb.dataset.id);
   });
   updateSendCount();
 });
 
 deleteBtn.onclick = async () => {
-  const emails = [...checkedEmails];
-  if (!emails.length) return;
-  const allSelected = emails.length === guests.length;
+  const ids = [...checkedIds];
+  if (!ids.length) return;
+  const allSelected = ids.length === guests.length;
   const msg = allSelected
-    ? `Delete ALL ${emails.length} guest(s) from the list? This cannot be undone.`
-    : `Delete ${emails.length} selected guest(s)? This cannot be undone.`;
+    ? `Delete ALL ${ids.length} guest(s) from the list? This cannot be undone.`
+    : `Delete ${ids.length} selected guest(s)? This cannot be undone.`;
   if (!confirm(msg)) return;
   await withButtonLoading(deleteBtn, 'Deleting...', async () => {
     await fetch('/api/guests/delete-bulk', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(allSelected ? { all: true } : { emails })
+      body: JSON.stringify(allSelected ? { all: true } : { ids })
     });
-    showToast(`Deleted ${emails.length} guest(s)`);
-    checkedEmails.clear();
+    showToast(`Deleted ${ids.length} guest(s)`);
+    checkedIds.clear();
     await loadGuests();
-  }, () => checkedEmails.size === 0);
+  }, () => checkedIds.size === 0);
 };
 
 // ---- import: paste ----
@@ -1764,6 +1780,19 @@ function updatePastePreviewCount() {
 }
 document.getElementById('pasteArea').addEventListener('input', updatePastePreviewCount);
 
+// How many of these rows share an email with a guest already in the list (or
+// with an earlier row in the same batch). Must be called before loadGuests()
+// refreshes `guests` with the just-imported rows.
+function countDuplicates(parsed) {
+  const seen = new Set(guests.map(g => (g.email || '').trim().toLowerCase()));
+  let dups = 0;
+  parsed.forEach(g => {
+    const key = (g.email || '').trim().toLowerCase();
+    if (seen.has(key)) dups++; else seen.add(key);
+  });
+  return dups;
+}
+
 // POSTs to the import endpoint and throws a readable Error unless the server
 // actually saved the guests — the buttons below used to show "Added N" even
 // when the request failed (expired session, server/DB error), so nothing got
@@ -1798,7 +1827,8 @@ document.getElementById('importPasteBtn').onclick = async () => {
     try { await postGuestImport(parsed); } catch (err) { showToast(err.message, true); return; }
     document.getElementById('pasteArea').value = '';
     updatePastePreviewCount();
-    showToast(`Added ${parsed.length} guest(s)` + (skipped.length ? ` — skipped ${skipped.length} row(s) with no detectable email` : ''), skipped.length > 0);
+    const dups = countDuplicates(parsed);
+    showToast(`Added ${parsed.length} guest(s)` + (dups ? ` — ${dups} duplicate(s) flagged in red` : '') + (skipped.length ? ` — skipped ${skipped.length} row(s) with no detectable email` : ''), skipped.length > 0 || dups > 0);
     await loadGuests();
   });
 };
@@ -1888,7 +1918,8 @@ document.getElementById('importCsvBtn').onclick = async () => {
     try { await postGuestImport(parsed); } catch (err) { showToast(err.message, true); return; }
     csvFileInput.value = '';
     updateDropzoneDisplay();
-    showToast(`Added ${parsed.length} guest(s) from CSV`);
+    const dups = countDuplicates(parsed);
+    showToast(`Added ${parsed.length} guest(s) from CSV` + (dups ? ` — ${dups} duplicate(s) flagged in red` : ''), dups > 0);
     await loadGuests();
   });
 };
@@ -1993,30 +2024,29 @@ document.getElementById('sendModalCloseBtn').onclick = () => {
 };
 
 sendBtn.onclick = async () => {
-  const emails = [...checkedEmails];
-  if (!emails.length) return;
+  const ids = [...checkedIds];
+  if (!ids.length) return;
   const templateId = selectedTemplateId;
   if (!templateId) { showToast('Add a template first (Templates tab)', true); return; }
   const templateName = templates.find(t => t.id === templateId)?.name || 'the selected template';
-  if (!confirm(`Send "${templateName}" to ${emails.length} guest(s)? This will actually send real emails.`)) return;
+  if (!confirm(`Send "${templateName}" to ${ids.length} guest(s)? This will actually send real emails.`)) return;
 
-  openSendModal(emails.length);
+  openSendModal(ids.length);
   let sentCount = 0, failedCount = 0, attempted = 0;
 
-  for (let i = 0; i < emails.length; i++) {
+  for (let i = 0; i < ids.length; i++) {
     if (sendCancelled) break;
-    const email = emails[i];
-    const result = await sendOneGuest(email, templateId);
+    const result = await sendOneGuest(ids[i], templateId);
     if (result.ok) sentCount++; else failedCount++;
     attempted++;
-    updateSendModalProgress(attempted, emails.length);
+    updateSendModalProgress(attempted, ids.length);
 
     if (sendCancelled) break;
-    if (i < emails.length - 1) await new Promise(r => setTimeout(r, 3500)); // throttle between guests
+    if (i < ids.length - 1) await new Promise(r => setTimeout(r, 3500)); // throttle between guests
   }
 
   showSendModalResult(sentCount, failedCount);
-  checkedEmails.clear();
+  checkedIds.clear();
   await loadGuests();
 };
 

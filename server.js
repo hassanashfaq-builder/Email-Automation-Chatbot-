@@ -5,7 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 const dns = require('dns');
 const {
-  loadGuests, saveGuests, upsertGuests, loadGuestByIdUnscoped, updateGuestByIdUnscoped,
+  loadGuests, saveGuests, addGuests, loadGuestByIdUnscoped, updateGuestByIdUnscoped,
   loadTemplates, saveTemplates,
   findUserByEmail, findUserById, createUser, updateUser, claimUnownedData,
 } = require('./lib/db');
@@ -508,46 +508,55 @@ app.get('/api/config', authRequired, async (req, res) => {
   });
 });
 
-app.get('/api/guests', authRequired, async (req, res) => res.json(await loadGuests(req.userId)));
+// Legacy guests (created before tracking support) may have no id yet. Every
+// per-row action (select, send, delete) is keyed by id — the same email can
+// now appear on more than one row — so make sure all rows have one.
+app.get('/api/guests', authRequired, async (req, res) => {
+  const guests = await loadGuests(req.userId);
+  if (guests.some(g => !g.id)) {
+    for (const g of guests) if (!g.id) g.id = crypto.randomUUID();
+    await saveGuests(req.userId, guests);
+  }
+  res.json(guests);
+});
 
-// Import guests (from paste or CSV upload). Merges by email — updates existing, adds new.
+// Import guests (from paste or CSV upload). Every row is added as a new
+// guest. An email that's already in the list (or repeated within the same
+// import) is still added, as a separate row — the UI flags those as
+// duplicates rather than merging them into the existing row.
 app.post('/api/guests/import', authRequired, async (req, res) => {
   const incoming = req.body.guests || [];
   const existing = await loadGuests(req.userId);
-  const byEmail = new Map(existing.map(g => [g.email.toLowerCase(), g]));
-  const touched = new Map(); // key -> { matchEmail, guest }, only rows this import adds/updates
+  const added = [];
 
   for (const g of incoming) {
     if (!g.email || !g.email.trim()) continue;
-    const key = g.email.trim().toLowerCase();
-    const prev = byEmail.get(key);
-    const name = (g.name || '').trim() || g.email.trim().split('@')[0];
-    const guest = {
-      id: prev?.id ?? crypto.randomUUID(),
-      name,
-      email: g.email.trim(),
+    const email = g.email.trim();
+    added.push({
+      id: crypto.randomUUID(),
+      name: (g.name || '').trim() || email.split('@')[0],
+      email,
       background: (g.background || '').trim(),
       topic: (g.topic || '').trim(),
-      body: prev?.body ?? null,
-      sent: prev?.sent ?? false,
-      sentAt: prev?.sentAt ?? null,
-      failed: prev?.failed ?? false,
-      failedAt: prev?.failedAt ?? null,
-      error: prev?.error ?? null,
-      opened: prev?.opened ?? false,
-      openedAt: prev?.openedAt ?? null,
-      openCount: prev?.openCount ?? 0,
-    };
-    byEmail.set(key, guest);
-    touched.set(key, { matchEmail: touched.get(key)?.matchEmail ?? prev?.email ?? null, guest });
+      body: null,
+      sent: false,
+      sentAt: null,
+      failed: false,
+      failedAt: null,
+      error: null,
+      opened: false,
+      openedAt: null,
+      openCount: 0,
+      addedAt: new Date().toISOString(),
+    });
   }
 
-  await upsertGuests(req.userId, [...touched.values()]);
-  res.json([...byEmail.values()]);
+  await addGuests(req.userId, added);
+  res.json([...existing, ...added]);
 });
 
-// Edit a guest's name/email/background by id (rather than by email, since
-// email itself — the merge key used elsewhere — may be what's being changed).
+// Edit a guest's name/email/background by id. Sharing an email with another
+// row is allowed — those rows are simply flagged as duplicates in the UI.
 app.put('/api/guests/:id', authRequired, async (req, res) => {
   const { name, email, background } = req.body;
   if (!email || !email.trim()) return res.status(400).json({ error: 'Email is required' });
@@ -557,9 +566,6 @@ app.put('/api/guests/:id', authRequired, async (req, res) => {
   if (idx === -1) return res.status(404).json({ error: 'Guest not found' });
 
   const newEmail = email.trim();
-  const collision = guests.find(g => g.id !== req.params.id && g.email.toLowerCase() === newEmail.toLowerCase());
-  if (collision) return res.status(400).json({ error: 'Another guest already has that email' });
-
   guests[idx].email = newEmail;
   guests[idx].name = (name || '').trim() || newEmail.split('@')[0];
   guests[idx].background = (background || '').trim();
@@ -567,21 +573,23 @@ app.put('/api/guests/:id', authRequired, async (req, res) => {
   res.json(guests[idx]);
 });
 
-app.delete('/api/guests/:email', authRequired, async (req, res) => {
-  const guests = (await loadGuests(req.userId)).filter(g => g.email.toLowerCase() !== req.params.email.toLowerCase());
+// Deleted by id, not email — the same email can be on several rows now, and
+// removing one duplicate must not remove the others.
+app.delete('/api/guests/:id', authRequired, async (req, res) => {
+  const guests = (await loadGuests(req.userId)).filter(g => g.id !== req.params.id);
   await saveGuests(req.userId, guests);
   res.json(guests);
 });
 
-// Bulk delete — either a specific set of emails, or every guest when `all` is set.
+// Bulk delete — either a specific set of guest ids, or every guest when `all` is set.
 app.post('/api/guests/delete-bulk', authRequired, async (req, res) => {
-  const { emails, all } = req.body;
+  const { ids, all } = req.body;
   if (all) {
     await saveGuests(req.userId, []);
     return res.json([]);
   }
-  const toRemove = new Set((emails || []).map(e => e.toLowerCase()));
-  const guests = (await loadGuests(req.userId)).filter(g => !toRemove.has(g.email.toLowerCase()));
+  const toRemove = new Set(ids || []);
+  const guests = (await loadGuests(req.userId)).filter(g => !toRemove.has(g.id));
   await saveGuests(req.userId, guests);
   res.json(guests);
 });
@@ -722,7 +730,9 @@ app.post('/api/check-bounces', authRequired, async (req, res) => {
 
     let matched = 0;
     for (const bounce of bounces) {
-      const idx = guests.findIndex(g => g.email.toLowerCase() === bounce.email && !g.failed);
+      // only rows actually sent — a duplicate of the same email that's still
+      // pending was never mailed, so it can't be what bounced
+      const idx = guests.findIndex(g => g.email.toLowerCase() === bounce.email && g.sent && !g.failed);
       if (idx === -1) continue;
       guests[idx].sent = false;
       guests[idx].failed = true;
@@ -743,7 +753,7 @@ app.post('/api/check-bounces', authRequired, async (req, res) => {
 // within a serverless function's execution time limit — the client drives
 // the batch by calling this once per selected guest.
 app.post('/api/process-one', authRequired, async (req, res) => {
-  const { email, templateId } = req.body;
+  const { id, templateId } = req.body;
   const currentUser = await findUserById(req.userId);
 
   let mailerConfig;
@@ -754,7 +764,7 @@ app.post('/api/process-one', authRequired, async (req, res) => {
   }
 
   const guests = await loadGuests(req.userId);
-  const guest = guests.find(g => g.email === email);
+  const guest = guests.find(g => g.id === id);
   if (!guest) return res.status(404).json({ ok: false, error: 'Guest not found' });
 
   const templates = await loadTemplates(req.userId);
@@ -763,7 +773,7 @@ app.post('/api/process-one', authRequired, async (req, res) => {
 
   const fail = async (message) => {
     const all = await loadGuests(req.userId);
-    const idx = all.findIndex(g => g.email === email);
+    const idx = all.findIndex(g => g.id === id);
     if (idx !== -1) {
       all[idx].sent = false;
       all[idx].failed = true;
@@ -780,14 +790,6 @@ app.post('/api/process-one', authRequired, async (req, res) => {
   };
 
   try {
-    // guests created before tracking support may not have an id yet
-    if (!guest.id) {
-      guest.id = crypto.randomUUID();
-      const withId = await loadGuests(req.userId);
-      const i = withId.findIndex(g => g.email === email);
-      if (i !== -1) { withId[i].id = guest.id; await saveGuests(req.userId, withId); }
-    }
-
     if (!EMAIL_RE.test(guest.email)) {
       return fail('Invalid email address format');
     }
@@ -812,7 +814,7 @@ app.post('/api/process-one', authRequired, async (req, res) => {
     const body = fillTemplate(template.body, guest);
 
     const withBody = await loadGuests(req.userId);
-    const bodyIdx = withBody.findIndex(g => g.email === email);
+    const bodyIdx = withBody.findIndex(g => g.id === id);
     if (bodyIdx !== -1) { withBody[bodyIdx].body = body; await saveGuests(req.userId, withBody); }
 
     // No style="display:none" — an explicitly hidden element is a stronger
@@ -850,7 +852,7 @@ app.post('/api/process-one', authRequired, async (req, res) => {
     }
 
     const all2 = await loadGuests(req.userId);
-    const idx2 = all2.findIndex(g => g.email === email);
+    const idx2 = all2.findIndex(g => g.id === id);
     if (idx2 !== -1) {
       all2[idx2].sent = true;
       all2[idx2].sentAt = new Date().toISOString();
